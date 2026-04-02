@@ -1,4 +1,4 @@
-#Bloc
+Bloc
 
 Bloc is a campus-focused group chat app designed for UMass Amherst students. The purpose of the app is to help students find and connect with others who share similar interests, whether that is studying, playing sports, attending events, or just meeting new people. Instead of relying only on private group chats, social media, or word of mouth, Bloc gives students one place to create, discover, and join public groups and communicate directly in real time.
 
