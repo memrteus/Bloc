@@ -1,12 +1,12 @@
-package com.bloc.backend;
+package com.bloc.app;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class BlocBackendApplication {
+public class BlocApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(BlocBackendApplication.class, args);
+        SpringApplication.run(BlocApplication.class, args);
     }
 }

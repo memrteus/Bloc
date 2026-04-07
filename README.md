@@ -17,7 +17,9 @@ Bloc/
 
 This repo does not commit real secrets.
 
-- `backend/.env.example` documents the variables expected by the Spring Boot service.
-- `frontend/.env.example` documents the variables expected by the Angular client build/runtime setup.
-- Developers should copy each example file into a local, ignored env file as needed for their own machine.
-- Keep environment-specific values out of source control from the beginning, even while the project is still in scaffold mode.
+- Backend uses `backend/.env` for local values and `backend/.env.example` as the committed template.
+- Frontend uses Angular environment files: `frontend/src/environments/environment.ts` for local values and `frontend/src/environments/environment.example.ts` as the committed template.
+- make yours with your actuall values to run
+- Backend needs Postgres connection values: `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`.
+- Frontend needs `apiBaseUrl`, `supabaseUrl`, and `supabasePublishableKey`.
+- Use placeholder values in committed example files only.

@@ -15,8 +15,8 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
+    "module": "node16",
+    "moduleResolution": "node16",
     "lib": ["ES2022", "dom"]
   },
   "angularCompilerOptions": {

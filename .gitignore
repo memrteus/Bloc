@@ -15,9 +15,11 @@ lerna-debug.log*
 docs/
 
 # Environment files
-.env
-.env.*
-!.env.example
+backend/.env
+!backend/.env.example
+
+frontend/src/environments/environment.ts
+!frontend/src/environments/environment.example.ts
 
 # Java / Gradle
 *.class

@@ -1,10 +1,10 @@
-package com.bloc.backend;
+package com.bloc.app;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class BlocBackendApplicationTests {
+class BlocApplicationTests {
 
     @Test
     void contextLoads() {
