@@ -1,16 +1,23 @@
-Bloc
+# Bloc Monorepo
 
-Bloc is a campus-focused group chat app designed for UMass Amherst students. The purpose of the app is to help students find and connect with others who share similar interests, whether that is studying, playing sports, attending events, or just meeting new people. Instead of relying only on private group chats, social media, or word of mouth, Bloc gives students one place to create, discover, and join public groups and communicate directly in real time.
+Bloc is a map-based campus app where users can sign up, browse active sidequests, create their own sidequests, and join quests posted by others. Sidequests are time-boxed and expire after 24 hours.
 
-Project Overview
 
-The app is meant to make campus coordination easier and more accessible. Students can browse groups, join conversations, and organize activities without needing to already know the people involved. While the first version is focused on UMass Amherst, the idea could later expand into a broader location-based platform for places like Amherst, Boston, or Massachusetts in general, where users can post and discover activities or “sidequests” on a map.
+## Repository Layout
 
-Features
-UMass student login and authentication
-Public group creation
-Public group browsing and joining
-Real-time group messaging
-Search and filtering for groups
-Location-based discovery of groups or activities through a map view
-Ability to post local “sidequests” for nearby users to discover and join
+```text
+Bloc/
+├── backend/    # Spring Boot service
+├── frontend/   # Angular client
+├── .gitignore
+└── README.md
+```
+
+## Environment Variable Strategy
+
+This repo does not commit real secrets.
+
+- `backend/.env.example` documents the variables expected by the Spring Boot service.
+- `frontend/.env.example` documents the variables expected by the Angular client build/runtime setup.
+- Developers should copy each example file into a local, ignored env file as needed for their own machine.
+- Keep environment-specific values out of source control from the beginning, even while the project is still in scaffold mode.

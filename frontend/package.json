@@ -1,0 +1,11 @@
+{
+  "name": "bloc-frontend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Angular frontend scaffold for Bloc",
+  "scripts": {
+    "start": "ng serve",
+    "build": "ng build",
+    "test": "ng test"
+  }
+}
