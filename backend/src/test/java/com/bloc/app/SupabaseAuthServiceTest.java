@@ -102,7 +102,9 @@ class SupabaseAuthServiceTest {
         assertEquals("test-publishable-key", capturedApiKey.get());
         assertTrue(capturedBody.get().contains("\"email\":\"student@umass.edu\""));
         assertTrue(capturedBody.get().contains("\"password\":\"example-password\""));
+        assertTrue(capturedBody.get().contains("\"data\":{"));
         assertTrue(capturedBody.get().contains("\"username\":\"blocuser\""));
+        assertTrue(capturedBody.get().contains("\"full_name\":\"Bloc User\""));
         verify(profileRepository).bootstrapProfile(
                 java.util.UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 "student@umass.edu",
@@ -193,6 +195,37 @@ class SupabaseAuthServiceTest {
         assertEquals("student2@umass.edu", response.email());
         assertTrue(response.emailConfirmationRequired());
         assertFalse(response.profileCreated());
+    }
+
+    @Test
+    void signupPreservesUpstreamStatusWhenErrorBodyIsNotJson() {
+        httpServer.createContext("/auth/v1/signup", exchange -> {
+            byte[] responseBody = "Signup temporarily unavailable".getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().add("Content-Type", "text/plain");
+            exchange.sendResponseHeaders(422, responseBody.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+        httpServer.start();
+
+        ProfileRepository profileRepository = Mockito.mock(ProfileRepository.class);
+        SupabaseAuthProperties properties = new SupabaseAuthProperties();
+        properties.setUrl("http://localhost:" + httpServer.getAddress().getPort());
+        properties.setPublishableKey("test-publishable-key");
+
+        SupabaseAuthService authService = new SupabaseAuthService(new ObjectMapper(), properties, profileRepository);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> authService.signup(
+                new SignupRequest(
+                        "student2@umass.edu",
+                        "example-password",
+                        "blocuser",
+                        "Bloc User")));
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, exception.getStatusCode());
+        assertEquals("Signup temporarily unavailable", exception.getReason());
     }
 
     @Test

@@ -26,7 +26,7 @@ public class ProfileRepository {
                 """
                 insert into profiles (
                     id,
-                    username,
+                    user_name,
                     full_name,
                     umass_email,
                     created_at,
@@ -54,7 +54,7 @@ public class ProfileRepository {
         return jdbcTemplate.query(
                 """
                 select
-                    username,
+                    user_name as username,
                     full_name,
                     umass_email,
                     avatar_url,

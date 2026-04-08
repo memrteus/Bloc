@@ -64,10 +64,17 @@ public class SupabaseAuthService implements AuthService {
                     .build();
 
             HttpResponse<String> response = HTTP_CLIENT.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            JsonNode responseBody = parseJson(response.body());
+            String rawResponseBody = response.body();
+            JsonNode responseBody = parseJsonIfPossible(rawResponseBody);
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ResponseStatusException(resolveErrorStatus(response.statusCode()), extractErrorMessage(responseBody));
+                throw new ResponseStatusException(
+                        resolveErrorStatus(response.statusCode()),
+                        extractErrorMessage(responseBody, rawResponseBody));
+            }
+
+            if (responseBody == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Supabase signup returned an unreadable response.");
             }
 
             JsonNode userNode = responseBody.path("user");
@@ -85,12 +92,14 @@ public class SupabaseAuthService implements AuthService {
 
             return new SignupResponse(message, userId, email, emailConfirmationRequired, profileCreated);
         } catch (IOException exception) {
+            logger.error("Failed to reach Supabase signup service at {}", signupUrl, exception);
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Failed to reach Supabase signup service.",
                     exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            logger.error("Supabase signup request was interrupted for {}", signupUrl, exception);
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Supabase signup request was interrupted.",
@@ -116,10 +125,17 @@ public class SupabaseAuthService implements AuthService {
                     .build();
 
             HttpResponse<String> response = HTTP_CLIENT.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            JsonNode responseBody = parseJson(response.body());
+            String rawResponseBody = response.body();
+            JsonNode responseBody = parseJsonIfPossible(rawResponseBody);
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ResponseStatusException(resolveErrorStatus(response.statusCode()), extractErrorMessage(responseBody));
+                throw new ResponseStatusException(
+                        resolveErrorStatus(response.statusCode()),
+                        extractErrorMessage(responseBody, rawResponseBody));
+            }
+
+            if (responseBody == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Supabase login returned an unreadable response.");
             }
 
             JsonNode userNode = responseBody.path("user");
@@ -131,12 +147,14 @@ public class SupabaseAuthService implements AuthService {
                     userNode.path("id").asText(null),
                     userNode.path("email").asText(null));
         } catch (IOException exception) {
+            logger.error("Failed to reach Supabase login service at {}", loginUrl, exception);
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Failed to reach Supabase login service.",
                     exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            logger.error("Supabase login request was interrupted for {}", loginUrl, exception);
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Supabase login request was interrupted.",
@@ -219,7 +237,7 @@ public class SupabaseAuthService implements AuthService {
         metadata.put("umass_email", request.email());
 
         if (!metadata.isEmpty()) {
-            payload.put("options", Map.of("data", metadata));
+            payload.put("data", metadata);
         }
 
         return payload;
@@ -233,6 +251,19 @@ public class SupabaseAuthService implements AuthService {
         return objectMapper.readTree(body);
     }
 
+    private JsonNode parseJsonIfPossible(String body) throws IOException {
+        if (!StringUtils.hasText(body)) {
+            return objectMapper.createObjectNode();
+        }
+
+        try {
+            return objectMapper.readTree(body);
+        } catch (IOException exception) {
+            logger.warn("Supabase returned a non-JSON response body: {}", body);
+            return null;
+        }
+    }
+
     private HttpStatus resolveErrorStatus(int statusCode) {
         if (statusCode >= 400 && statusCode < 500) {
             return HttpStatus.valueOf(statusCode);
@@ -241,7 +272,11 @@ public class SupabaseAuthService implements AuthService {
         return HttpStatus.BAD_GATEWAY;
     }
 
-    private String extractErrorMessage(JsonNode responseBody) {
+    private String extractErrorMessage(JsonNode responseBody, String rawResponseBody) {
+        if (responseBody == null) {
+            return StringUtils.hasText(rawResponseBody) ? rawResponseBody : "Supabase request failed.";
+        }
+
         String message = firstNonBlank(
                 responseBody.path("msg").asText(null),
                 responseBody.path("message").asText(null),
