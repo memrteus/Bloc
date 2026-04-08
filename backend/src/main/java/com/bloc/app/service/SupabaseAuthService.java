@@ -2,6 +2,7 @@ package com.bloc.app.service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -23,6 +24,7 @@ import com.bloc.app.dto.LoginRequest;
 import com.bloc.app.dto.LoginResponse;
 import com.bloc.app.dto.SignupRequest;
 import com.bloc.app.dto.SignupResponse;
+import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.repository.ProfileRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -69,17 +71,15 @@ public class SupabaseAuthService implements AuthService {
             }
 
             JsonNode userNode = responseBody.path("user");
-            if (userNode.isMissingNode() || userNode.isNull()) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Supabase signup succeeded without returning a user.");
-            }
-
             String userId = userNode.path("id").asText(null);
             String email = firstNonBlank(userNode.path("email").asText(null), request.email());
             boolean emailConfirmationRequired = responseBody.path("session").isMissingNode()
                     || responseBody.path("session").isNull();
             boolean profileCreated = bootstrapProfileIfPossible(userId, email, request);
 
-            String message = emailConfirmationRequired
+            String message = userNode.isMissingNode() || userNode.isNull()
+                    ? "Signup request accepted. If the account can be created, check your email for the next step."
+                    : emailConfirmationRequired
                     ? "Signup succeeded. Check your email to confirm your account."
                     : "Signup succeeded.";
 
@@ -145,8 +145,24 @@ public class SupabaseAuthService implements AuthService {
     }
 
     @Override
-    public CurrentUserResponse getCurrentUser() {
-        throw notImplemented("Current user endpoint scaffolded in Phase 1 only. Authenticated user lookup will be added in Phase 4.");
+    public CurrentUserResponse getCurrentUser(AuthenticatedUser authenticatedUser) {
+        return profileRepository.findCurrentUserProfile(authenticatedUser.userId())
+                .map(profile -> new CurrentUserResponse(
+                        authenticatedUser.userId().toString(),
+                        firstNonBlank(authenticatedUser.email(), profile.umassEmail()),
+                        profile.username(),
+                        profile.fullName(),
+                        profile.umassEmail(),
+                        profile.avatarUrl(),
+                        profile.bio()))
+                .orElseGet(() -> new CurrentUserResponse(
+                        authenticatedUser.userId().toString(),
+                        authenticatedUser.email(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null));
     }
 
     private void validateSignupRequest(SignupRequest request) {
@@ -174,11 +190,10 @@ public class SupabaseAuthService implements AuthService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPABASE_URL is not configured.");
         }
 
-        String baseUrl = supabaseAuthProperties.getUrl().endsWith("/")
-                ? supabaseAuthProperties.getUrl().substring(0, supabaseAuthProperties.getUrl().length() - 1)
-                : supabaseAuthProperties.getUrl();
+        String baseUrl = trimTrailingSlash(supabaseAuthProperties.getUrl());
+        URI baseUri = parseSupabaseBaseUri(baseUrl);
 
-        return baseUrl + path;
+        return baseUri.resolve(path).toString();
     }
 
     private String requirePublishableKey() {
@@ -233,7 +248,7 @@ public class SupabaseAuthService implements AuthService {
                 responseBody.path("error_description").asText(null),
                 responseBody.path("error").asText(null));
 
-        return StringUtils.hasText(message) ? message : "Supabase signup failed.";
+        return StringUtils.hasText(message) ? message : "Supabase request failed.";
     }
 
     private String firstNonBlank(String... values) {
@@ -244,6 +259,37 @@ public class SupabaseAuthService implements AuthService {
         }
 
         return null;
+    }
+
+    private URI parseSupabaseBaseUri(String baseUrl) {
+        try {
+            URI baseUri = new URI(baseUrl);
+            String scheme = baseUri.getScheme();
+            if (!StringUtils.hasText(scheme) || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
+                throw invalidSupabaseUrl();
+            }
+
+            if (!StringUtils.hasText(baseUri.getHost())) {
+                throw invalidSupabaseUrl();
+            }
+
+            return baseUri;
+        } catch (URISyntaxException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "SUPABASE_URL is invalid. Use an absolute URL such as https://<project-ref>.supabase.co.",
+                    exception);
+        }
+    }
+
+    private String trimTrailingSlash(String value) {
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private ResponseStatusException invalidSupabaseUrl() {
+        return new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "SUPABASE_URL must be an absolute http(s) URL such as https://<project-ref>.supabase.co.");
     }
 
     private boolean bootstrapProfileIfPossible(String userId, String email, SignupRequest request) {

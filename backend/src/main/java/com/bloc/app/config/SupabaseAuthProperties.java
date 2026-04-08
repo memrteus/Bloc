@@ -7,6 +7,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -37,7 +38,12 @@ public class SupabaseAuthProperties {
 
         String resolvedJwkSetUri = resolvedJwkSetUri();
         if (StringUtils.hasText(resolvedJwkSetUri)) {
-            return NimbusJwtDecoder.withJwkSetUri(resolvedJwkSetUri).build();
+            return NimbusJwtDecoder.withJwkSetUri(resolvedJwkSetUri)
+                    .jwsAlgorithms(algorithms -> {
+                        algorithms.add(SignatureAlgorithm.ES256);
+                        algorithms.add(SignatureAlgorithm.RS256);
+                    })
+                    .build();
         }
 
         throw new IllegalStateException(
