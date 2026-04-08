@@ -1,13 +1,19 @@
 package com.bloc.app.repository;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class ProfileRepository {
+
+    private static final RowMapper<CurrentUserProfile> CURRENT_USER_PROFILE_ROW_MAPPER = (resultSet, rowNum) -> mapCurrentUserProfile(resultSet);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -42,5 +48,40 @@ public class ProfileRepository {
                         .addValue("email", email));
 
         return rowsInserted > 0;
+    }
+
+    public Optional<CurrentUserProfile> findCurrentUserProfile(UUID profileId) {
+        return jdbcTemplate.query(
+                """
+                select
+                    username,
+                    full_name,
+                    umass_email,
+                    avatar_url,
+                    bio
+                from profiles
+                where id = :id
+                """,
+                new MapSqlParameterSource().addValue("id", profileId),
+                CURRENT_USER_PROFILE_ROW_MAPPER)
+                .stream()
+                .findFirst();
+    }
+
+    private static CurrentUserProfile mapCurrentUserProfile(ResultSet resultSet) throws SQLException {
+        return new CurrentUserProfile(
+                resultSet.getString("username"),
+                resultSet.getString("full_name"),
+                resultSet.getString("umass_email"),
+                resultSet.getString("avatar_url"),
+                resultSet.getString("bio"));
+    }
+
+    public record CurrentUserProfile(
+            String username,
+            String fullName,
+            String umassEmail,
+            String avatarUrl,
+            String bio) {
     }
 }

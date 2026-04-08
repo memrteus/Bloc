@@ -1,6 +1,8 @@
 package com.bloc.app.controller;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +15,7 @@ import com.bloc.app.dto.LoginRequest;
 import com.bloc.app.dto.LoginResponse;
 import com.bloc.app.dto.SignupRequest;
 import com.bloc.app.dto.SignupResponse;
+import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.AuthService;
 
 @RestController
@@ -37,7 +40,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public CurrentUserResponse me() {
-        return authService.getCurrentUser();
+    public CurrentUserResponse me(@AuthenticationPrincipal Jwt jwt) {
+        return authService.getCurrentUser(AuthenticatedUser.fromJwt(jwt));
     }
 }

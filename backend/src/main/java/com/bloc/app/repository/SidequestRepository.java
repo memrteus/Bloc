@@ -128,6 +128,7 @@ public class SidequestRepository {
                     :role,
                     now()
                 )
+                on conflict (sidequest_id, user_id) do nothing
                 """,
                 new MapSqlParameterSource()
                         .addValue("id", UUID.randomUUID())
