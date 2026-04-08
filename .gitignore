@@ -30,6 +30,7 @@ frontend/src/environments/environment.ts
 build/
 out/
 target/
+!backend/gradle/wrapper/gradle-wrapper.jar
 
 # Node / Angular
 node_modules/
