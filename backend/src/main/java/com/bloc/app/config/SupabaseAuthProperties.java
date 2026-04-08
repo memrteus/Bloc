@@ -21,6 +21,7 @@ import com.bloc.app.security.AudienceValidator;
 public class SupabaseAuthProperties {
 
     private String url;
+    private String publishableKey;
     private String jwtSecret;
     private String jwkSetUri;
     private String issuer;
@@ -93,6 +94,14 @@ public class SupabaseAuthProperties {
 
     public String getJwtSecret() {
         return jwtSecret;
+    }
+
+    public String getPublishableKey() {
+        return publishableKey;
+    }
+
+    public void setPublishableKey(String publishableKey) {
+        this.publishableKey = publishableKey;
     }
 
     public void setJwtSecret(String jwtSecret) {
