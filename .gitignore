@@ -37,6 +37,10 @@ dist/
 .angular/
 .angular/cache/
 coverage/
+out-tsc/
+bazel-out/
+.sass-cache/
+typings/
 
 # IDEs / editors
 .idea/
