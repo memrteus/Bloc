@@ -3,6 +3,7 @@ package com.bloc.app;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import com.bloc.app.config.SupabaseAuthProperties;
+import com.bloc.app.dto.LoginRequest;
+import com.bloc.app.dto.LoginResponse;
 import com.bloc.app.dto.SignupRequest;
 import com.bloc.app.dto.SignupResponse;
 import com.bloc.app.repository.ProfileRepository;
@@ -145,5 +148,91 @@ class SupabaseAuthServiceTest {
 
         assertFalse(response.emailConfirmationRequired());
         assertFalse(response.profileCreated());
+    }
+
+    @Test
+    void loginCallsSupabasePasswordGrantAndReturnsSessionTokens() {
+        httpServer.createContext("/auth/v1/token", exchange -> {
+            capturedApiKey.set(exchange.getRequestHeaders().getFirst("apikey"));
+            capturedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            assertEquals("grant_type=password", exchange.getRequestURI().getQuery());
+
+            byte[] responseBody = """
+                    {
+                      "access_token": "access-token-value",
+                      "refresh_token": "refresh-token-value",
+                      "token_type": "bearer",
+                      "expires_in": 3600,
+                      "user": {
+                        "id": "33333333-3333-3333-3333-333333333333",
+                        "email": "student3@umass.edu"
+                      }
+                    }
+                    """.getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBody.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+        httpServer.start();
+
+        ProfileRepository profileRepository = Mockito.mock(ProfileRepository.class);
+        SupabaseAuthProperties properties = new SupabaseAuthProperties();
+        properties.setUrl("http://localhost:" + httpServer.getAddress().getPort());
+        properties.setPublishableKey("test-publishable-key");
+
+        SupabaseAuthService authService = new SupabaseAuthService(new ObjectMapper(), properties, profileRepository);
+
+        LoginResponse response = authService.login(new LoginRequest(
+                "student3@umass.edu",
+                "example-password"));
+
+        assertEquals("access-token-value", response.accessToken());
+        assertEquals("refresh-token-value", response.refreshToken());
+        assertEquals("bearer", response.tokenType());
+        assertEquals(3600L, response.expiresIn());
+        assertEquals("33333333-3333-3333-3333-333333333333", response.userId());
+        assertEquals("student3@umass.edu", response.email());
+        assertEquals("test-publishable-key", capturedApiKey.get());
+        assertTrue(capturedBody.get().contains("\"email\":\"student3@umass.edu\""));
+        assertTrue(capturedBody.get().contains("\"password\":\"example-password\""));
+    }
+
+    @Test
+    void loginHandlesSuccessfulResponseWithoutUserObject() {
+        httpServer.createContext("/auth/v1/token", exchange -> {
+            byte[] responseBody = """
+                    {
+                      "access_token": "access-token-value",
+                      "refresh_token": "refresh-token-value",
+                      "token_type": "bearer",
+                      "expires_in": 3600
+                    }
+                    """.getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBody.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+        httpServer.start();
+
+        ProfileRepository profileRepository = Mockito.mock(ProfileRepository.class);
+        SupabaseAuthProperties properties = new SupabaseAuthProperties();
+        properties.setUrl("http://localhost:" + httpServer.getAddress().getPort());
+        properties.setPublishableKey("test-publishable-key");
+
+        SupabaseAuthService authService = new SupabaseAuthService(new ObjectMapper(), properties, profileRepository);
+
+        LoginResponse response = authService.login(new LoginRequest(
+                "student4@umass.edu",
+                "example-password"));
+
+        assertEquals("access-token-value", response.accessToken());
+        assertNull(response.userId());
+        assertNull(response.email());
     }
 }

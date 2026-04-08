@@ -50,7 +50,7 @@ public class SupabaseAuthService implements AuthService {
     public SignupResponse signup(SignupRequest request) {
         validateSignupRequest(request);
 
-        String signupUrl = buildSignupUrl();
+        String signupUrl = buildAuthUrl("/auth/v1/signup");
         String publishableKey = requirePublishableKey();
 
         try {
@@ -100,7 +100,48 @@ public class SupabaseAuthService implements AuthService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
-        throw notImplemented("Login endpoint scaffolded in Phase 1 only. Supabase login will be added in Phase 3.");
+        validateLoginRequest(request);
+
+        String loginUrl = buildAuthUrl("/auth/v1/token?grant_type=password");
+        String publishableKey = requirePublishableKey();
+
+        try {
+            HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(loginUrl))
+                    .header("apikey", publishableKey)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(Map.of(
+                            "email", request.email(),
+                            "password", request.password()))))
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            JsonNode responseBody = parseJson(response.body());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new ResponseStatusException(resolveErrorStatus(response.statusCode()), extractErrorMessage(responseBody));
+            }
+
+            JsonNode userNode = responseBody.path("user");
+            return new LoginResponse(
+                    responseBody.path("access_token").asText(null),
+                    responseBody.path("refresh_token").asText(null),
+                    responseBody.path("token_type").asText(null),
+                    responseBody.path("expires_in").isNumber() ? responseBody.path("expires_in").asLong() : null,
+                    userNode.path("id").asText(null),
+                    userNode.path("email").asText(null));
+        } catch (IOException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Failed to reach Supabase login service.",
+                    exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Supabase login request was interrupted.",
+                    exception);
+        }
     }
 
     @Override
@@ -118,7 +159,17 @@ public class SupabaseAuthService implements AuthService {
         }
     }
 
-    private String buildSignupUrl() {
+    private void validateLoginRequest(LoginRequest request) {
+        if (!StringUtils.hasText(request.email())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required.");
+        }
+
+        if (!StringUtils.hasText(request.password())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required.");
+        }
+    }
+
+    private String buildAuthUrl(String path) {
         if (!StringUtils.hasText(supabaseAuthProperties.getUrl())) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPABASE_URL is not configured.");
         }
@@ -127,7 +178,7 @@ public class SupabaseAuthService implements AuthService {
                 ? supabaseAuthProperties.getUrl().substring(0, supabaseAuthProperties.getUrl().length() - 1)
                 : supabaseAuthProperties.getUrl();
 
-        return baseUrl + "/auth/v1/signup";
+        return baseUrl + path;
     }
 
     private String requirePublishableKey() {
