@@ -24,11 +24,17 @@ public class SidequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<SidequestResponse> discoverSidequests(String search, String category) {
+    public List<SidequestResponse> discoverSidequests(String search, String category, int limit, int offset) {
         String normalizedSearch = search != null && !search.isBlank() ? search.trim() : null;
         String normalizedCategory = category != null && !category.isBlank() ? category.trim() : null;
+        validateDiscoveryPagination(limit, offset);
 
-        return sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(normalizedSearch, normalizedCategory).stream()
+        return sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(
+                        normalizedSearch,
+                        normalizedCategory,
+                        limit,
+                        offset)
+                .stream()
                 .map(SidequestResponse::fromModel)
                 .toList();
     }
@@ -75,6 +81,16 @@ public class SidequestService {
     private void validateCreateRequest(CreateSidequestRequest request) {
         if (request.maxParticipants() != null && request.maxParticipants() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants must be at least 1.");
+        }
+    }
+
+    private void validateDiscoveryPagination(int limit, int offset) {
+        if (limit < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be at least 1.");
+        }
+
+        if (offset < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "offset must be at least 0.");
         }
     }
 

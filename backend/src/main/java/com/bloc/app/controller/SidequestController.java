@@ -32,8 +32,10 @@ public class SidequestController {
     @GetMapping("/discover")
     public List<SidequestResponse> discoverSidequests(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String category) {
-        return sidequestService.discoverSidequests(search, category);
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+        return sidequestService.discoverSidequests(search, category, limit, offset);
     }
 
     @PostMapping

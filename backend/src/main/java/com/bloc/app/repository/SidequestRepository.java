@@ -51,7 +51,11 @@ public class SidequestRepository {
         return count != null && count > 0;
     }
 
-    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(String search, String category) {
+    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(
+            String search,
+            String category,
+            int limit,
+            int offset) {
         String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
         String normalizedCategory = category != null ? category.toLowerCase() : null;
         StringBuilder sql = new StringBuilder("""
@@ -89,13 +93,19 @@ public class SidequestRepository {
                       and (
                         lower(title) like :searchPattern
                         or lower(description) like :searchPattern
-                        or lower(location_name) like :searchPattern
+                    or lower(location_name) like :searchPattern
                       )
                     """);
             parameters.addValue("searchPattern", searchPattern);
         }
 
-        sql.append("order by created_at desc");
+        sql.append("""
+                order by created_at desc
+                limit :limit
+                offset :offset
+                """);
+        parameters.addValue("limit", limit);
+        parameters.addValue("offset", offset);
 
         List<SidequestRow> rows = jdbcTemplate.query(
                 sql.toString(),
