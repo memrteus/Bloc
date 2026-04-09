@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class ProfileRepository {
 
+    private static final RowMapper<ProfileSummary> PROFILE_SUMMARY_ROW_MAPPER = (resultSet, rowNum) -> mapProfileSummary(resultSet);
     private static final RowMapper<CurrentUserProfile> CURRENT_USER_PROFILE_ROW_MAPPER = (resultSet, rowNum) -> mapCurrentUserProfile(resultSet);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -68,6 +69,25 @@ public class ProfileRepository {
                 .findFirst();
     }
 
+    public Optional<ProfileSummary> findProfileById(UUID profileId) {
+        return jdbcTemplate.query(
+                """
+                select
+                    id,
+                    user_name as username,
+                    full_name,
+                    umass_email,
+                    avatar_url,
+                    bio
+                from profiles
+                where id = :id
+                """,
+                new MapSqlParameterSource().addValue("id", profileId),
+                PROFILE_SUMMARY_ROW_MAPPER)
+                .stream()
+                .findFirst();
+    }
+
     private static CurrentUserProfile mapCurrentUserProfile(ResultSet resultSet) throws SQLException {
         return new CurrentUserProfile(
                 resultSet.getString("username"),
@@ -77,7 +97,26 @@ public class ProfileRepository {
                 resultSet.getString("bio"));
     }
 
+    private static ProfileSummary mapProfileSummary(ResultSet resultSet) throws SQLException {
+        return new ProfileSummary(
+                resultSet.getObject("id", UUID.class),
+                resultSet.getString("username"),
+                resultSet.getString("full_name"),
+                resultSet.getString("umass_email"),
+                resultSet.getString("avatar_url"),
+                resultSet.getString("bio"));
+    }
+
     public record CurrentUserProfile(
+            String username,
+            String fullName,
+            String umassEmail,
+            String avatarUrl,
+            String bio) {
+    }
+
+    public record ProfileSummary(
+            UUID id,
             String username,
             String fullName,
             String umassEmail,
