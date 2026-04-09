@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -88,6 +89,22 @@ class SidequestSecurityWebMvcTest {
         org.junit.jupiter.api.Assertions.assertEquals("Library sprint", request.title());
         org.junit.jupiter.api.Assertions.assertEquals("Main library", request.locationName());
         org.junit.jupiter.api.Assertions.assertEquals(creatorId, user.userId());
+    }
+
+    @Test
+    void discoverSidequestsReturnsBasicDtoListSortedByRepositoryOrder() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID secondCreatorId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        when(sidequestService.discoverSidequests()).thenReturn(List.of(
+                sampleResponse(creatorId, List.of(creatorId)),
+                sampleResponse(secondCreatorId, List.of(secondCreatorId))));
+
+        mockMvc.perform(get("/api/sidequests/discover"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].creatorId").value(creatorId.toString()))
+                .andExpect(jsonPath("$[1].creatorId").value(secondCreatorId.toString()));
+
+        verify(sidequestService).discoverSidequests();
     }
 
     @Test

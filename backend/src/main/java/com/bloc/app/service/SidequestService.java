@@ -1,6 +1,7 @@
 package com.bloc.app.service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,13 @@ public class SidequestService {
 
     public SidequestService(SidequestRepository sidequestRepository) {
         this.sidequestRepository = sidequestRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<SidequestResponse> discoverSidequests() {
+        return sidequestRepository.findAllSidequestsOrderByCreatedAtDesc().stream()
+                .map(SidequestResponse::fromModel)
+                .toList();
     }
 
     @Transactional
