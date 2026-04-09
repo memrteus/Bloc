@@ -5,7 +5,22 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { AuthApiService } from '../../core/services/auth-api.service';
-import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } from '../../core/services/sidequest-api.service';
+import {
+  CreateSidequestRequest,
+  DiscoverSidequestResponse,
+  SidequestApiService,
+  SidequestResponse
+} from '../../core/services/sidequest-api.service';
+
+interface CreateSidequestForm {
+  title: string;
+  description: string;
+  category: string;
+  locationName: string;
+  latitude: number | null;
+  longitude: number | null;
+  maxParticipants: number | null;
+}
 
 @Component({
   selector: 'app-home-page',
@@ -23,9 +38,9 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
         </div>
 
         <nav class="menu">
-          <a class="menu-item active" routerLink="/home">Browse groups</a>
+          <button type="button" class="menu-item" [class.active]="activeMainTab === 'discover'" (click)="showDiscoverTab()">Browse groups</button>
           <a class="menu-item" routerLink="/map">Map</a>
-          <a class="menu-item" routerLink="/create-sidequest">Create sidequest</a>
+          <button type="button" class="menu-item" [class.active]="activeMainTab === 'create'" (click)="showCreateTab()">Create sidequest</button>
           <a class="menu-item" routerLink="/profile">Profile</a>
         </nav>
 
@@ -47,10 +62,10 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
       <main class="dashboard-main">
         <header class="main-header">
           <div>
-            <p class="mono-title">Community feed</p>
-            <h1>Browse groups</h1>
+            <p class="mono-title">{{ activeMainTab === 'discover' ? 'Community feed' : 'Create sidequest' }}</p>
+            <h1>{{ activeMainTab === 'discover' ? 'Browse groups' : 'Create sidequest' }}</h1>
           </div>
-          <div class="header-actions">
+          <div class="header-actions" *ngIf="activeMainTab === 'discover'">
             <input
               class="search-input"
               type="search"
@@ -58,75 +73,145 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
-            <a routerLink="/create-sidequest" class="primary-btn">+ Sidequest</a>
+            <button type="button" class="primary-btn" (click)="showCreateTab()">Create sidequest</button>
+          </div>
+          <div class="header-actions" *ngIf="activeMainTab === 'create'">
+            <button type="button" class="primary-btn" (click)="showDiscoverTab()">Back to discovery</button>
           </div>
         </header>
 
-        <div class="filters">
-          <button
-            type="button"
-            [class.active]="selectedCategory === null"
-            (click)="applyCategoryFilter(null)"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            *ngFor="let category of discoveredCategories"
-            [class.active]="selectedCategory === category"
-            (click)="applyCategoryFilter(category)"
-          >
-            {{ category }}
-          </button>
-        </div>
-
-        <article class="banner">
-          <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
-            <p class="mono-title">Sidequest nearby</p>
-            <h2>{{ featured.title }}</h2>
-            <p class="meta">
-              {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
-            </p>
+        <ng-container *ngIf="activeMainTab === 'discover'; else createTabContent">
+          <div class="filters">
+            <button
+              type="button"
+              [class.active]="selectedCategory === null"
+              (click)="applyCategoryFilter(null)"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              *ngFor="let category of discoveredCategories"
+              [class.active]="selectedCategory === category"
+              (click)="applyCategoryFilter(category)"
+            >
+              {{ category }}
+            </button>
           </div>
-          <ng-template #noFeaturedSidequest>
-            <div>
+
+          <article class="banner">
+            <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
               <p class="mono-title">Sidequest nearby</p>
-              <h2>No active sidequests yet</h2>
-              <p class="meta">Create one to get discovery started.</p>
+              <h2>{{ featured.title }}</h2>
+              <p class="meta">
+                {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
+              </p>
             </div>
-          </ng-template>
-          <a routerLink="/map" class="ghost-btn">View</a>
-        </article>
-
-        <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
-        <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
-
-        <section class="group-grid">
-          <article
-            class="group-card"
-            *ngFor="let sidequest of sidequests; index as i"
-            [style.--delay.ms]="i * 45"
-            role="button"
-            tabindex="0"
-            (click)="openSidequestDetails(sidequest)"
-            (keydown.enter)="openSidequestDetails(sidequest)"
-          >
-            <div class="card-top">
-              <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+            <ng-template #noFeaturedSidequest>
               <div>
-                <h3>{{ sidequest.title }}</h3>
-                <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                <p class="mono-title">Sidequest nearby</p>
+                <h2>No active sidequests yet</h2>
+                <p class="meta">Create one to get discovery started.</p>
               </div>
-            </div>
-            <p class="desc">{{ sidequest.description }}</p>
-            <div class="card-foot">
-              <span class="tag">{{ sidequest.category || 'General' }}</span>
-              <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
-                {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
-              </span>
-            </div>
+            </ng-template>
+            <a routerLink="/map" class="ghost-btn">View</a>
           </article>
-        </section>
+
+          <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
+          <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+          <section class="group-grid">
+            <article
+              class="group-card"
+              *ngFor="let sidequest of sidequests; index as i"
+              [style.--delay.ms]="i * 45"
+              role="button"
+              tabindex="0"
+              (click)="openSidequestDetails(sidequest)"
+              (keydown.enter)="openSidequestDetails(sidequest)"
+            >
+              <div class="card-top">
+                <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+                <div>
+                  <h3>{{ sidequest.title }}</h3>
+                  <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                </div>
+              </div>
+              <p class="desc">{{ sidequest.description }}</p>
+              <div class="card-foot">
+                <span class="tag">{{ sidequest.category || 'General' }}</span>
+                <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                  {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
+                </span>
+              </div>
+            </article>
+          </section>
+        </ng-container>
+
+        <ng-template #createTabContent>
+          <section class="create-tab-card">
+            <p class="mono-title">Create sidequest</p>
+            <h2>Create a new group</h2>
+
+            <form class="simple-create-form" (ngSubmit)="submitCreateSidequest()">
+              <label>
+                Title
+                <input name="title" type="text" [(ngModel)]="createForm.title" required minlength="3" placeholder="Soccer pickup game" />
+              </label>
+
+              <label>
+                Description
+                <textarea
+                  name="description"
+                  [(ngModel)]="createForm.description"
+                  required
+                  minlength="10"
+                  rows="4"
+                  placeholder="Meet at the rec field for a quick game."
+                ></textarea>
+              </label>
+
+              <label>
+                Category
+                <input name="category" type="text" [(ngModel)]="createForm.category" required placeholder="Sports" />
+              </label>
+
+              <label>
+                Location
+                <input name="locationName" type="text" [(ngModel)]="createForm.locationName" required placeholder="Campus rec field" />
+              </label>
+
+              <label>
+                Max participants
+                <input name="maxParticipants" type="number" min="1" [(ngModel)]="createForm.maxParticipants" />
+              </label>
+
+              <p class="meta">Coordinates are optional.</p>
+
+              <div class="coordinates-row">
+                <label>
+                  Latitude
+                  <input name="latitude" type="number" step="0.000001" [(ngModel)]="createForm.latitude" />
+                </label>
+
+                <label>
+                  Longitude
+                  <input name="longitude" type="number" step="0.000001" [(ngModel)]="createForm.longitude" />
+                </label>
+              </div>
+
+              <div class="panel-errors" *ngIf="createErrors.length > 0">
+                <p class="participant-title">Please fix these fields:</p>
+                <ul>
+                  <li *ngFor="let error of createErrors">{{ error }}</li>
+                </ul>
+              </div>
+
+              <button type="submit" class="join-btn" [disabled]="creatingSidequest">{{ creatingSidequest ? 'Creating...' : 'Create sidequest' }}</button>
+              <p class="meta" *ngIf="createMessage">{{ createMessage }}</p>
+            </form>
+          </section>
+        </ng-template>
 
         <section class="quest-panel-backdrop" *ngIf="selectedSidequest || detailsLoading" (click)="closeSidequestDetails()">
           <article class="quest-panel" (click)="$event.stopPropagation()">
@@ -239,10 +324,14 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
     .menu-item {
       text-decoration: none;
       color: #b7d1dc;
+      border: 0;
       border-radius: 10px;
       padding: 0.58rem 0.7rem;
       font-size: 0.9rem;
       transition: background 0.15s ease, color 0.15s ease;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
     }
 
     .menu-item:hover {
@@ -558,6 +647,65 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
       font-size: 0.93rem;
     }
 
+    .create-tab-card {
+      border: 1px solid #c6d9e3;
+      border-radius: 16px;
+      background: #fafdff;
+      box-shadow: 0 12px 28px rgba(10, 32, 44, 0.1);
+      padding: 1rem 1rem 1.1rem;
+    }
+
+    .simple-create-form {
+      margin-top: 0.8rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .simple-create-form label {
+      display: grid;
+      gap: 0.35rem;
+      color: #14384a;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .simple-create-form input,
+    .simple-create-form textarea {
+      border: 1px solid #c4d6df;
+      border-radius: 10px;
+      padding: 0.56rem 0.68rem;
+      background: #f9fdff;
+      color: #123345;
+      font: inherit;
+    }
+
+    .simple-create-form textarea {
+      resize: vertical;
+      min-height: 92px;
+    }
+
+    .coordinates-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+
+    .panel-errors {
+      border: 1px solid #f1c3c3;
+      border-radius: 12px;
+      background: #fff7f7;
+      padding: 0.65rem 0.75rem;
+    }
+
+    .panel-errors ul {
+      margin: 0.45rem 0 0;
+      padding-left: 1rem;
+      display: grid;
+      gap: 0.22rem;
+      color: #7f2d2d;
+      font-size: 0.8rem;
+    }
+
     .participant-block {
       margin-top: 0.85rem;
       border: 1px solid #d3e4eb;
@@ -661,6 +809,10 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
         padding: 1rem;
       }
 
+      .coordinates-row {
+        grid-template-columns: 1fr;
+      }
+
       .banner {
         flex-direction: column;
         align-items: flex-start;
@@ -678,6 +830,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected featuredSidequest: DiscoverSidequestResponse | null = null;
   protected discoveredCategories: string[] = [];
   protected myQuestTitles: string[] = [];
+  protected activeMainTab: 'discover' | 'create' = 'discover';
   protected selectedCategory: string | null = null;
   protected searchTerm = '';
   protected displayName = 'Profile';
@@ -688,8 +841,20 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected detailsError = '';
   protected joiningSidequest = false;
   protected joinMessage = '';
+  protected creatingSidequest = false;
+  protected createErrors: string[] = [];
+  protected createMessage = '';
   protected isLoading = false;
   protected errorMessage = '';
+  protected createForm: CreateSidequestForm = {
+    title: '',
+    description: '',
+    category: '',
+    locationName: '',
+    latitude: null,
+    longitude: null,
+    maxParticipants: 8
+  };
 
   ngOnInit(): void {
     this.loadCurrentUser();
@@ -762,6 +927,17 @@ export class HomePageComponent implements OnInit, OnDestroy {
     });
   }
 
+  protected showDiscoverTab(): void {
+    this.activeMainTab = 'discover';
+  }
+
+  protected showCreateTab(): void {
+    this.activeMainTab = 'create';
+    this.closeSidequestDetails();
+    this.createErrors = [];
+    this.createMessage = '';
+  }
+
   protected closeSidequestDetails(): void {
     this.selectedSidequest = null;
     this.detailsError = '';
@@ -788,6 +964,41 @@ export class HomePageComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.joinMessage = 'Unable to join this quest right now.';
+        }
+      });
+  }
+
+  protected submitCreateSidequest(): void {
+    if (this.creatingSidequest) {
+      return;
+    }
+
+    const payload = this.buildCreateSidequestPayload();
+    if (!payload) {
+      return;
+    }
+
+    this.creatingSidequest = true;
+    this.createMessage = '';
+
+    this.sidequestApi
+      .create(payload)
+      .pipe(finalize(() => (this.creatingSidequest = false)))
+      .subscribe({
+        next: (response) => {
+          this.createMessage = 'Sidequest created.';
+          this.activeMainTab = 'discover';
+          this.resetCreateForm();
+          this.selectedSidequest = response;
+          this.detailsError = '';
+          this.detailsLoading = false;
+          this.joinMessage = '';
+          this.loadSidequests(false);
+        },
+        error: (error: unknown) => {
+          const fallbackMessage = 'Unable to create sidequest right now.';
+          const message = this.extractErrorMessage(error) || fallbackMessage;
+          this.createErrors = [message];
         }
       });
   }
@@ -826,6 +1037,79 @@ export class HomePageComponent implements OnInit, OnDestroy {
     }
 
     return 'Join quest';
+  }
+
+  private buildCreateSidequestPayload(): CreateSidequestRequest | null {
+    this.createErrors = [];
+
+    const title = this.createForm.title.trim();
+    const description = this.createForm.description.trim();
+    const category = this.createForm.category.trim();
+    const locationName = this.createForm.locationName.trim();
+    const maxParticipants = this.createForm.maxParticipants;
+
+    if (!title) {
+      this.createErrors.push('Title is required.');
+    }
+
+    if (!description) {
+      this.createErrors.push('Description is required.');
+    }
+
+    if (!category) {
+      this.createErrors.push('Category is required.');
+    }
+
+    if (!locationName) {
+      this.createErrors.push('Location is required.');
+    }
+
+    if (maxParticipants !== null && maxParticipants !== undefined && maxParticipants < 1) {
+      this.createErrors.push('Max participants must be at least 1.');
+    }
+
+    if (this.createErrors.length > 0) {
+      return null;
+    }
+
+    return {
+      title,
+      description,
+      category,
+      locationName,
+      latitude: this.createForm.latitude,
+      longitude: this.createForm.longitude,
+      maxParticipants: maxParticipants ?? null
+    };
+  }
+
+  private resetCreateForm(): void {
+    this.createForm = {
+      title: '',
+      description: '',
+      category: '',
+      locationName: '',
+      latitude: null,
+      longitude: null,
+      maxParticipants: 8
+    };
+  }
+
+  private extractErrorMessage(error: unknown): string | null {
+    if (!error || typeof error !== 'object') {
+      return null;
+    }
+
+    const errorValue = error as { error?: { message?: string }; message?: string };
+    if (errorValue.error?.message && errorValue.error.message.trim()) {
+      return errorValue.error.message.trim();
+    }
+
+    if (errorValue.message && errorValue.message.trim()) {
+      return errorValue.message.trim();
+    }
+
+    return null;
   }
 
   private loadSidequests(showLoader: boolean): void {

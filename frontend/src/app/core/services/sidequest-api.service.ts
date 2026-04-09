@@ -26,6 +26,16 @@ export interface DiscoverSidequestQuery {
   offset?: number;
 }
 
+export interface CreateSidequestRequest {
+  title: string;
+  description: string;
+  category: string;
+  locationName: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  maxParticipants?: number | null;
+}
+
 export interface SidequestResponse {
   id: string;
   title: string;
@@ -103,6 +113,18 @@ export class SidequestApiService {
           data,
           expiresAt: Date.now() + this.detailTtlMs
         });
+      })
+    );
+  }
+
+  create(request: CreateSidequestRequest): Observable<SidequestResponse> {
+    return this.http.post<SidequestResponse>('/sidequests', request).pipe(
+      tap((data) => {
+        this.detailCache.set(data.id, {
+          data,
+          expiresAt: Date.now() + this.detailTtlMs
+        });
+        this.discoverCache.clear();
       })
     );
   }
