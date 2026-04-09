@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 
 import { AppConfigService } from '../../core/services/app-config.service';
+import { DiscoverSidequestResponse, SidequestApiService } from '../../core/services/sidequest-api.service';
 
 @Component({
   selector: 'app-home-page',
@@ -43,12 +45,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
       </aside>
 
       <main class="dashboard-main">
-        <div class="sky-chip">
-          <div class="sun"></div>
-          <div class="moon"></div>
-          <div class="cloud"></div>
-        </div>
-
         <header class="main-header">
           <div>
             <p class="mono-title">Community feed</p>
@@ -62,36 +58,44 @@ import { AppConfigService } from '../../core/services/app-config.service';
 
         <div class="filters">
           <span class="active">All</span>
-          <span>Sports</span>
-          <span>Study</span>
-          <span>Gaming</span>
-          <span>Events</span>
-          <span>Social</span>
+          <span *ngFor="let category of discoveredCategories">{{ category }}</span>
         </div>
 
         <article class="banner">
-          <div>
+          <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
             <p class="mono-title">Sidequest nearby</p>
-            <h2>Free pizza at Isenberg</h2>
-            <p class="meta">Posted 5 min ago | 0.3 mi away | 12 interested</p>
+            <h2>{{ featured.title }}</h2>
+            <p class="meta">
+              {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
+            </p>
           </div>
+          <ng-template #noFeaturedSidequest>
+            <div>
+              <p class="mono-title">Sidequest nearby</p>
+              <h2>No active sidequests yet</h2>
+              <p class="meta">Create one to get discovery started.</p>
+            </div>
+          </ng-template>
           <a routerLink="/map" class="ghost-btn">View</a>
         </article>
 
+        <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
+        <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
+
         <section class="group-grid">
-          <article class="group-card" *ngFor="let group of groups; index as i" [style.--delay.ms]="i * 45">
+          <article class="group-card" *ngFor="let sidequest of sidequests; index as i" [style.--delay.ms]="i * 45">
             <div class="card-top">
-              <div class="icon-chip">{{ group.icon }}</div>
+              <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
               <div>
-                <h3>{{ group.name }}</h3>
-                <p>{{ group.members }} members</p>
+                <h3>{{ sidequest.title }}</h3>
+                <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
               </div>
             </div>
-            <p class="desc">{{ group.description }}</p>
+            <p class="desc">{{ sidequest.description }}</p>
             <div class="card-foot">
-              <span class="tag">{{ group.tag }}</span>
-              <span [class]="group.active ? 'status active' : 'status quiet'">
-                {{ group.active ? 'Active' : 'Quiet' }}
+              <span class="tag">{{ sidequest.category || 'General' }}</span>
+              <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
               </span>
             </div>
           </article>
@@ -109,8 +113,16 @@ import { AppConfigService } from '../../core/services/app-config.service';
     </section>
   `,
   styles: [`
+    :host {
+      display: grid;
+      min-height: calc(100vh - 2rem);
+      align-content: center;
+      padding: 1.25rem 1rem 1.75rem;
+    }
+
     .dashboard-wrap {
       max-width: 1220px;
+      width: 100%;
       margin: 0 auto;
       border: 1px solid rgba(167, 182, 194, 0.46);
       border-radius: 24px;
@@ -247,73 +259,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
       display: flex;
       flex-direction: column;
       gap: 1rem;
-    }
-
-    .sky-chip {
-      position: absolute;
-      top: 0.9rem;
-      right: 1rem;
-      width: 110px;
-      height: 50px;
-      border-radius: 999px;
-      border: 1px solid rgba(111, 150, 167, 0.45);
-      background: rgba(228, 245, 250, 0.8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .sun,
-    .moon {
-      width: 22px;
-      height: 22px;
-      border-radius: 999px;
-      position: absolute;
-      transition: transform 0.35s ease, opacity 0.35s ease;
-    }
-
-    .sun {
-      background: radial-gradient(circle at 35% 35%, #fff1ad 0%, #ffc857 58%, #f9a826 100%);
-      box-shadow: 0 0 0 5px rgba(255, 200, 87, 0.22);
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    .moon {
-      background: radial-gradient(circle at 30% 30%, #f8f9fd 0%, #cfd7ec 70%, #adb8d5 100%);
-      opacity: 0;
-      transform: translateX(44px);
-    }
-
-    .cloud {
-      position: absolute;
-      width: 52px;
-      height: 16px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.8);
-      bottom: 8px;
-      left: 14px;
-    }
-
-    :host-context(body.theme-night) .sky-chip {
-      background: rgba(27, 36, 65, 0.9);
-      border-color: rgba(148, 163, 198, 0.45);
-    }
-
-    :host-context(body.theme-night) .sun {
-      opacity: 0;
-      transform: translateX(-44px);
-    }
-
-    :host-context(body.theme-night) .moon {
-      opacity: 1;
-      transform: translateX(0);
-      box-shadow: -5px -5px 0 rgba(9, 14, 35, 0.25) inset;
-    }
-
-    :host-context(body.theme-night) .cloud {
-      background: rgba(66, 76, 114, 0.8);
     }
 
     .main-header {
@@ -535,6 +480,12 @@ import { AppConfigService } from '../../core/services/app-config.service';
     }
 
     @media (max-width: 900px) {
+      :host {
+        min-height: auto;
+        align-content: start;
+        padding: 0.75rem 0.75rem 1rem;
+      }
+
       .dashboard-wrap {
         grid-template-columns: 1fr;
       }
@@ -545,7 +496,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
       }
 
       .main-header {
-        margin-top: 2.25rem;
         flex-direction: column;
         align-items: flex-start;
       }
@@ -574,11 +524,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
         padding: 1rem;
       }
 
-      .sky-chip {
-        right: 0.9rem;
-        width: 90px;
-      }
-
       .banner {
         flex-direction: column;
         align-items: flex-start;
@@ -586,57 +531,78 @@ import { AppConfigService } from '../../core/services/app-config.service';
     }
   `]
 })
-export class HomePageComponent {
+export class HomePageComponent implements OnInit {
   protected readonly config = inject(AppConfigService);
+  private readonly sidequestApi = inject(SidequestApiService);
 
-  protected readonly groups = [
-    {
-      icon: 'SC',
-      name: 'Pickup soccer',
-      members: 24,
-      description: 'Weekday games by the rec fields. All skill levels welcome.',
-      tag: 'Sports',
-      active: true
-    },
-    {
-      icon: 'ST',
-      name: 'CS 377 study group',
-      members: 18,
-      description: 'Operating systems midterm prep at DuBois tonight.',
-      tag: 'Study',
-      active: true
-    },
-    {
-      icon: 'GM',
-      name: 'Late night gaming',
-      members: 31,
-      description: 'Valorant, Smash, and pickup sessions after 10pm.',
-      tag: 'Gaming',
-      active: false
-    },
-    {
-      icon: 'MU',
-      name: 'Music production',
-      members: 9,
-      description: 'Share beats, collaborate, and get fast feedback.',
-      tag: 'Social',
-      active: false
-    },
-    {
-      icon: 'FD',
-      name: 'Food adventures',
-      members: 42,
-      description: 'Explore Amherst spots and host weekend cooking hangs.',
-      tag: 'Events',
-      active: true
-    },
-    {
-      icon: 'RN',
-      name: 'Morning run club',
-      members: 15,
-      description: 'Daily sunrise runs around campus pond.',
-      tag: 'Sports',
-      active: false
+  protected sidequests: DiscoverSidequestResponse[] = [];
+  protected featuredSidequest: DiscoverSidequestResponse | null = null;
+  protected discoveredCategories: string[] = [];
+  protected isLoading = false;
+  protected errorMessage = '';
+
+  ngOnInit(): void {
+    this.loadSidequests();
+  }
+
+  protected getCategoryInitial(category: string | null | undefined): string {
+    if (!category || !category.trim()) {
+      return 'SQ';
     }
-  ];
+
+    return category.trim().slice(0, 2).toUpperCase();
+  }
+
+  protected isSidequestActive(sidequest: DiscoverSidequestResponse): boolean {
+    return sidequest.status.toLowerCase() === 'active';
+  }
+
+  protected getRelativeTime(isoTime: string): string {
+    const eventTime = new Date(isoTime).getTime();
+    const deltaMinutes = Math.max(0, Math.floor((Date.now() - eventTime) / 60000));
+
+    if (deltaMinutes < 1) {
+      return 'just now';
+    }
+
+    if (deltaMinutes < 60) {
+      return `${deltaMinutes} min ago`;
+    }
+
+    const deltaHours = Math.floor(deltaMinutes / 60);
+    if (deltaHours < 24) {
+      return `${deltaHours} hr ago`;
+    }
+
+    const deltaDays = Math.floor(deltaHours / 24);
+    return `${deltaDays} day${deltaDays > 1 ? 's' : ''} ago`;
+  }
+
+  private loadSidequests(): void {
+    this.isLoading = true;
+    this.errorMessage = '';
+
+    this.sidequestApi
+      .discover({ limit: 12, offset: 0 })
+      .pipe(finalize(() => (this.isLoading = false)))
+      .subscribe({
+        next: (response) => {
+          this.sidequests = response;
+          this.featuredSidequest = response.length > 0 ? response[0] : null;
+
+          const categories = new Set(
+            response
+              .map((sidequest) => sidequest.category?.trim())
+              .filter((category): category is string => Boolean(category))
+          );
+          this.discoveredCategories = Array.from(categories).slice(0, 5);
+        },
+        error: () => {
+          this.errorMessage = 'Unable to load sidequests right now.';
+          this.sidequests = [];
+          this.featuredSidequest = null;
+          this.discoveredCategories = [];
+        }
+      });
+  }
 }
