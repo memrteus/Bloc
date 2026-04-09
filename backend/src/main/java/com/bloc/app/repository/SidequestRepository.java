@@ -51,7 +51,8 @@ public class SidequestRepository {
         return count != null && count > 0;
     }
 
-    public List<Sidequest> findAllSidequestsOrderByCreatedAtDesc() {
+    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(String search) {
+        String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
         List<SidequestRow> rows = jdbcTemplate.query(
                 """
                 select
@@ -72,8 +73,15 @@ public class SidequestRepository {
                 from sidequests
                 where status = 'active'
                   and (expires_at is null or expires_at > now())
+                  and (
+                    :searchPattern is null
+                    or lower(title) like :searchPattern
+                    or lower(description) like :searchPattern
+                    or lower(location_name) like :searchPattern
+                  )
                 order by created_at desc
                 """,
+                new MapSqlParameterSource().addValue("searchPattern", searchPattern),
                 SIDEQUEST_ROW_MAPPER);
 
         return rows.stream()

@@ -95,7 +95,7 @@ class SidequestSecurityWebMvcTest {
     void discoverSidequestsReturnsBasicDtoListSortedByRepositoryOrder() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID secondCreatorId = UUID.fromString("22222222-2222-2222-2222-222222222222");
-        when(sidequestService.discoverSidequests()).thenReturn(List.of(
+        when(sidequestService.discoverSidequests(null)).thenReturn(List.of(
                 sampleResponse(creatorId, List.of(creatorId)),
                 sampleResponse(secondCreatorId, List.of(secondCreatorId))));
 
@@ -104,7 +104,20 @@ class SidequestSecurityWebMvcTest {
                 .andExpect(jsonPath("$[0].creatorId").value(creatorId.toString()))
                 .andExpect(jsonPath("$[1].creatorId").value(secondCreatorId.toString()));
 
-        verify(sidequestService).discoverSidequests();
+        verify(sidequestService).discoverSidequests(null);
+    }
+
+    @Test
+    void discoverSidequestsPassesSearchQueryParam() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        when(sidequestService.discoverSidequests("library")).thenReturn(List.of(
+                sampleResponse(creatorId, List.of(creatorId))));
+
+        mockMvc.perform(get("/api/sidequests/discover").param("search", "library"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].locationName").value("Main library"));
+
+        verify(sidequestService).discoverSidequests("library");
     }
 
     @Test

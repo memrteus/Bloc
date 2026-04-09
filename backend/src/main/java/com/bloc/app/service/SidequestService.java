@@ -24,8 +24,10 @@ public class SidequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<SidequestResponse> discoverSidequests() {
-        return sidequestRepository.findAllSidequestsOrderByCreatedAtDesc().stream()
+    public List<SidequestResponse> discoverSidequests(String search) {
+        String normalizedSearch = search != null && !search.isBlank() ? search.trim() : null;
+
+        return sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(normalizedSearch).stream()
                 .map(SidequestResponse::fromModel)
                 .toList();
     }

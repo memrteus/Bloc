@@ -8,6 +8,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -29,8 +30,8 @@ public class SidequestController {
     }
 
     @GetMapping("/discover")
-    public List<SidequestResponse> discoverSidequests() {
-        return sidequestService.discoverSidequests();
+    public List<SidequestResponse> discoverSidequests(@RequestParam(required = false) String search) {
+        return sidequestService.discoverSidequests(search);
     }
 
     @PostMapping
