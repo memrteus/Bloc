@@ -24,9 +24,11 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.controller.SidequestController;
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.security.SecurityConfig;
@@ -96,13 +98,14 @@ class SidequestSecurityWebMvcTest {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID secondCreatorId = UUID.fromString("22222222-2222-2222-2222-222222222222");
         when(sidequestService.discoverSidequests(null, null, 20, 0)).thenReturn(List.of(
-                sampleResponse(creatorId, List.of(creatorId)),
-                sampleResponse(secondCreatorId, List.of(secondCreatorId))));
+                sampleDiscoverResponse(creatorId),
+                sampleDiscoverResponse(secondCreatorId)));
 
         mockMvc.perform(get("/api/sidequests/discover"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].creatorId").value(creatorId.toString()))
-                .andExpect(jsonPath("$[1].creatorId").value(secondCreatorId.toString()));
+                .andExpect(jsonPath("$[1].creatorId").value(secondCreatorId.toString()))
+                .andExpect(jsonPath("$[0].participantUserIds").doesNotExist());
 
         verify(sidequestService).discoverSidequests(null, null, 20, 0);
     }
@@ -111,7 +114,7 @@ class SidequestSecurityWebMvcTest {
     void discoverSidequestsPassesSearchQueryParam() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         when(sidequestService.discoverSidequests("library", null, 20, 0)).thenReturn(List.of(
-                sampleResponse(creatorId, List.of(creatorId))));
+                sampleDiscoverResponse(creatorId)));
 
         mockMvc.perform(get("/api/sidequests/discover").param("search", "library"))
                 .andExpect(status().isOk())
@@ -124,7 +127,7 @@ class SidequestSecurityWebMvcTest {
     void discoverSidequestsPassesCategoryQueryParam() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         when(sidequestService.discoverSidequests(null, "study", 20, 0)).thenReturn(List.of(
-                sampleResponse(creatorId, List.of(creatorId))));
+                sampleDiscoverResponse(creatorId)));
 
         mockMvc.perform(get("/api/sidequests/discover").param("category", "study"))
                 .andExpect(status().isOk())
@@ -137,7 +140,7 @@ class SidequestSecurityWebMvcTest {
     void discoverSidequestsPassesPaginationQueryParams() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         when(sidequestService.discoverSidequests(null, null, 5, 10)).thenReturn(List.of(
-                sampleResponse(creatorId, List.of(creatorId))));
+                sampleDiscoverResponse(creatorId)));
 
         mockMvc.perform(get("/api/sidequests/discover")
                         .param("limit", "5")
@@ -146,6 +149,24 @@ class SidequestSecurityWebMvcTest {
                 .andExpect(jsonPath("$[0].creatorId").value(creatorId.toString()));
 
         verify(sidequestService).discoverSidequests(null, null, 5, 10);
+    }
+
+    @Test
+    void discoverSidequestsRejectsNegativeLimit() throws Exception {
+        when(sidequestService.discoverSidequests(null, null, -1, 0))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "limit must be at least 0."));
+
+        mockMvc.perform(get("/api/sidequests/discover").param("limit", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void discoverSidequestsRejectsNegativeOffset() throws Exception {
+        when(sidequestService.discoverSidequests(null, null, 20, -1))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "offset must be at least 0."));
+
+        mockMvc.perform(get("/api/sidequests/discover").param("offset", "-1"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -182,6 +203,24 @@ class SidequestSecurityWebMvcTest {
                 "active",
                 creatorId,
                 participantUserIds,
+                Instant.parse("2026-04-07T17:00:00Z"),
+                Instant.parse("2026-04-07T17:00:00Z"));
+    }
+
+    private DiscoverSidequestResponse sampleDiscoverResponse(UUID creatorId) {
+        return new DiscoverSidequestResponse(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "Library sprint",
+                "Focus session before class",
+                "study",
+                "Main library",
+                null,
+                null,
+                Instant.parse("2026-04-07T18:00:00Z"),
+                Instant.parse("2026-04-08T18:00:00Z"),
+                8,
+                "active",
+                creatorId,
                 Instant.parse("2026-04-07T17:00:00Z"),
                 Instant.parse("2026-04-07T17:00:00Z"));
     }

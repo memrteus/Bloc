@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.repository.SidequestRepository;
 import com.bloc.app.security.AuthenticatedUser;
@@ -24,7 +25,7 @@ public class SidequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<SidequestResponse> discoverSidequests(String search, String category, int limit, int offset) {
+    public List<DiscoverSidequestResponse> discoverSidequests(String search, String category, int limit, int offset) {
         String normalizedSearch = search != null && !search.isBlank() ? search.trim() : null;
         String normalizedCategory = category != null && !category.isBlank() ? category.trim() : null;
         validateDiscoveryPagination(limit, offset);
@@ -35,7 +36,7 @@ public class SidequestService {
                         limit,
                         offset)
                 .stream()
-                .map(SidequestResponse::fromModel)
+                .map(DiscoverSidequestResponse::fromModel)
                 .toList();
     }
 
@@ -85,8 +86,8 @@ public class SidequestService {
     }
 
     private void validateDiscoveryPagination(int limit, int offset) {
-        if (limit < 1) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be at least 1.");
+        if (limit < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be at least 0.");
         }
 
         if (offset < 0) {

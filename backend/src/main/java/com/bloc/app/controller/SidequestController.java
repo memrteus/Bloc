@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.SidequestService;
@@ -30,7 +31,7 @@ public class SidequestController {
     }
 
     @GetMapping("/discover")
-    public List<SidequestResponse> discoverSidequests(
+    public List<DiscoverSidequestResponse> discoverSidequests(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "20") int limit,

@@ -56,6 +56,38 @@ public class SidequestRepository {
             String category,
             int limit,
             int offset) {
+        DiscoveryQuery discoveryQuery = buildDiscoverableSidequestsQuery(search, category, limit, offset);
+
+        List<SidequestRow> rows = jdbcTemplate.query(
+                discoveryQuery.sql(),
+                discoveryQuery.parameters(),
+                SIDEQUEST_ROW_MAPPER);
+
+        return rows.stream()
+                .map(row -> new Sidequest(
+                        row.id(),
+                        row.creatorId(),
+                        row.title(),
+                        row.description(),
+                        row.category(),
+                        row.locationName(),
+                        row.latitude(),
+                        row.longitude(),
+                        row.startsAt(),
+                        row.expiresAt(),
+                        row.maxParticipants(),
+                        row.status(),
+                        row.createdAt(),
+                        row.updatedAt(),
+                        getParticipantUserIds(row.id())))
+                .toList();
+    }
+
+    DiscoveryQuery buildDiscoverableSidequestsQuery(
+            String search,
+            String category,
+            int limit,
+            int offset) {
         String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
         String normalizedCategory = category != null ? category.toLowerCase() : null;
         StringBuilder sql = new StringBuilder("""
@@ -107,29 +139,7 @@ public class SidequestRepository {
         parameters.addValue("limit", limit);
         parameters.addValue("offset", offset);
 
-        List<SidequestRow> rows = jdbcTemplate.query(
-                sql.toString(),
-                parameters,
-                SIDEQUEST_ROW_MAPPER);
-
-        return rows.stream()
-                .map(row -> new Sidequest(
-                        row.id(),
-                        row.creatorId(),
-                        row.title(),
-                        row.description(),
-                        row.category(),
-                        row.locationName(),
-                        row.latitude(),
-                        row.longitude(),
-                        row.startsAt(),
-                        row.expiresAt(),
-                        row.maxParticipants(),
-                        row.status(),
-                        row.createdAt(),
-                        row.updatedAt(),
-                        getParticipantUserIds(row.id())))
-                .toList();
+        return new DiscoveryQuery(sql.toString(), parameters);
     }
 
     public UUID insertSidequest(
@@ -315,5 +325,8 @@ public class SidequestRepository {
             String status,
             Instant createdAt,
             Instant updatedAt) {
+    }
+
+    record DiscoveryQuery(String sql, MapSqlParameterSource parameters) {
     }
 }
