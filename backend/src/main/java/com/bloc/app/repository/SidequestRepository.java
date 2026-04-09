@@ -51,10 +51,10 @@ public class SidequestRepository {
         return count != null && count > 0;
     }
 
-    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(String search) {
+    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(String search, String category) {
         String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
-        List<SidequestRow> rows = jdbcTemplate.query(
-                """
+        String normalizedCategory = category != null ? category.toLowerCase() : null;
+        StringBuilder sql = new StringBuilder("""
                 select
                     id,
                     creator_id,
@@ -73,15 +73,33 @@ public class SidequestRepository {
                 from sidequests
                 where status = 'active'
                   and (expires_at is null or expires_at > now())
-                  and (
-                    :searchPattern is null
-                    or lower(title) like :searchPattern
-                    or lower(description) like :searchPattern
-                    or lower(location_name) like :searchPattern
-                  )
-                order by created_at desc
-                """,
-                new MapSqlParameterSource().addValue("searchPattern", searchPattern),
+                """);
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+
+        if (normalizedCategory != null) {
+            sql.append("""
+                      and lower(category) = :category
+                    """);
+            parameters.addValue("category", normalizedCategory);
+        }
+
+        if (searchPattern != null) {
+            sql.append("""
+                      and (
+                        lower(title) like :searchPattern
+                        or lower(description) like :searchPattern
+                        or lower(location_name) like :searchPattern
+                      )
+                    """);
+            parameters.addValue("searchPattern", searchPattern);
+        }
+
+        sql.append("order by created_at desc");
+
+        List<SidequestRow> rows = jdbcTemplate.query(
+                sql.toString(),
+                parameters,
                 SIDEQUEST_ROW_MAPPER);
 
         return rows.stream()
