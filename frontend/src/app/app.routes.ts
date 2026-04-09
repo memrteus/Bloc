@@ -8,11 +8,12 @@ import { CreateSidequestPageComponent } from './features/sidequests/create-sideq
 import { ProfilePageComponent } from './features/profile/profile-page.component';
 
 export const appRoutes: Routes = [
-  { path: '', component: HomePageComponent },
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
+  { path: 'home', component: HomePageComponent },
   { path: 'login', component: LoginPageComponent },
   { path: 'signup', component: SignupPageComponent },
   { path: 'map', component: MapPageComponent },
   { path: 'create-sidequest', component: CreateSidequestPageComponent },
   { path: 'profile', component: ProfilePageComponent },
-  { path: '**', redirectTo: '' }
+  { path: '**', redirectTo: 'login' }
 ];
