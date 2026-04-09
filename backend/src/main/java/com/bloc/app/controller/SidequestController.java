@@ -39,6 +39,11 @@ public class SidequestController {
         return sidequestService.discoverSidequests(search, category, limit, offset);
     }
 
+    @GetMapping("/{sidequestId}")
+    public SidequestResponse getSidequest(@PathVariable String sidequestId) {
+        return sidequestService.getSidequest(sidequestId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public SidequestResponse createSidequest(

@@ -41,6 +41,16 @@ public class SidequestService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public SidequestResponse getSidequest(String sidequestId) {
+        UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
+        if (!sidequestRepository.sidequestExists(parsedSidequestId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sidequest not found.");
+        }
+
+        return SidequestResponse.fromModel(sidequestRepository.getRequiredSidequest(parsedSidequestId));
+    }
+
     @Transactional
     public SidequestResponse createSidequest(CreateSidequestRequest request, AuthenticatedUser user) {
         ensureProfileExists(user);

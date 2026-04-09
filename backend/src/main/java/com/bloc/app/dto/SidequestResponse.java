@@ -21,6 +21,7 @@ public record SidequestResponse(
         String status,
         UUID creatorId,
         List<UUID> participantUserIds,
+        List<String> participantDisplayNames,
         Instant updatedAt,
         Instant createdAt) {
 
@@ -39,6 +40,7 @@ public record SidequestResponse(
                 sidequest.status(),
                 sidequest.creatorId(),
                 sidequest.participantUserIds(),
+                sidequest.participantDisplayNames(),
                 sidequest.updatedAt(),
                 sidequest.createdAt());
     }

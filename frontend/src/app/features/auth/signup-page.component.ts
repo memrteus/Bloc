@@ -377,8 +377,16 @@ export class SignupPageComponent {
   private readonly router = inject(Router);
 
   protected onSubmit(): void {
-    if (!this.fullName || !this.email || !this.password || !this.confirmPassword) {
+    const normalizedEmail = this.email.trim();
+
+    if (!this.fullName || !normalizedEmail || !this.password || !this.confirmPassword) {
       this.errorMessage = 'Fill out all fields to create an account.';
+      this.successMessage = '';
+      return;
+    }
+
+    if (!this.isAllowedUmassEmail(normalizedEmail)) {
+      this.errorMessage = 'Use a valid UMass email address to sign up.';
       this.successMessage = '';
       return;
     }
@@ -393,10 +401,10 @@ export class SignupPageComponent {
     this.errorMessage = '';
     this.successMessage = '';
 
-    const username = this.email.split('@')[0] || this.fullName.trim().replace(/\s+/g, '').toLowerCase();
+    const username = normalizedEmail.split('@')[0] || this.fullName.trim().replace(/\s+/g, '').toLowerCase();
 
     this.authApi.signup({
-      email: this.email,
+      email: normalizedEmail,
       password: this.password,
       fullName: this.fullName,
       username
@@ -416,6 +424,13 @@ export class SignupPageComponent {
   }
 
   private resolveErrorMessage(error: HttpErrorResponse): string {
+    const backendMessage =
+      typeof error.error === 'string' ? error.error : error.error?.message ? String(error.error.message) : '';
+
+    if (backendMessage.includes('profiles_umass_email_check')) {
+      return 'Use a valid UMass email address to sign up.';
+    }
+
     if (typeof error.error === 'string' && error.error.trim()) {
       return error.error;
     }
@@ -425,5 +440,9 @@ export class SignupPageComponent {
     }
 
     return 'Signup failed. Please try again.';
+  }
+
+  private isAllowedUmassEmail(email: string): boolean {
+    return /@([a-z0-9-]+\.)*umass\.edu$/i.test(email);
   }
 }

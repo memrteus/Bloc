@@ -1,13 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 
-import { AppConfigService } from '../../core/services/app-config.service';
+import { AuthApiService } from '../../core/services/auth-api.service';
+import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } from '../../core/services/sidequest-api.service';
 
 @Component({
   selector: 'app-home-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <section class="dashboard-wrap">
       <aside class="sidebar">
@@ -27,90 +30,156 @@ import { AppConfigService } from '../../core/services/app-config.service';
         </nav>
 
         <div class="sidebar-panel">
-          <p class="mono-title">My groups</p>
-          <p>CS 377 study group</p>
-          <p>Pickup soccer</p>
-          <p>Late night gaming</p>
+          <p class="mono-title">My quests</p>
+          <p *ngFor="let questTitle of myQuestTitles">{{ questTitle }}</p>
+          <p *ngIf="myQuestTitles.length === 0">No quests yet</p>
         </div>
 
         <div class="user-card">
-          <div class="avatar">M</div>
+          <div class="avatar">{{ userInitial }}</div>
           <div>
-            <p class="name">Mateus</p>
-            <p class="status">Online now</p>
+            <p class="name">{{ displayName }}</p>
+            <p class="status">Online now · Profile</p>
           </div>
         </div>
       </aside>
 
       <main class="dashboard-main">
-        <div class="sky-chip">
-          <div class="sun"></div>
-          <div class="moon"></div>
-          <div class="cloud"></div>
-        </div>
-
         <header class="main-header">
           <div>
             <p class="mono-title">Community feed</p>
             <h1>Browse groups</h1>
           </div>
           <div class="header-actions">
-            <div class="search-pill">Search groups...</div>
+            <input
+              class="search-input"
+              type="search"
+              placeholder="Search groups..."
+              [(ngModel)]="searchTerm"
+              (ngModelChange)="onSearchChange()"
+            />
             <a routerLink="/create-sidequest" class="primary-btn">+ Sidequest</a>
           </div>
         </header>
 
         <div class="filters">
-          <span class="active">All</span>
-          <span>Sports</span>
-          <span>Study</span>
-          <span>Gaming</span>
-          <span>Events</span>
-          <span>Social</span>
+          <button
+            type="button"
+            [class.active]="selectedCategory === null"
+            (click)="applyCategoryFilter(null)"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            *ngFor="let category of discoveredCategories"
+            [class.active]="selectedCategory === category"
+            (click)="applyCategoryFilter(category)"
+          >
+            {{ category }}
+          </button>
         </div>
 
         <article class="banner">
-          <div>
+          <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
             <p class="mono-title">Sidequest nearby</p>
-            <h2>Free pizza at Isenberg</h2>
-            <p class="meta">Posted 5 min ago | 0.3 mi away | 12 interested</p>
+            <h2>{{ featured.title }}</h2>
+            <p class="meta">
+              {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
+            </p>
           </div>
+          <ng-template #noFeaturedSidequest>
+            <div>
+              <p class="mono-title">Sidequest nearby</p>
+              <h2>No active sidequests yet</h2>
+              <p class="meta">Create one to get discovery started.</p>
+            </div>
+          </ng-template>
           <a routerLink="/map" class="ghost-btn">View</a>
         </article>
 
+        <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
+        <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
+
         <section class="group-grid">
-          <article class="group-card" *ngFor="let group of groups; index as i" [style.--delay.ms]="i * 45">
+          <article
+            class="group-card"
+            *ngFor="let sidequest of sidequests; index as i"
+            [style.--delay.ms]="i * 45"
+            role="button"
+            tabindex="0"
+            (click)="openSidequestDetails(sidequest)"
+            (keydown.enter)="openSidequestDetails(sidequest)"
+          >
             <div class="card-top">
-              <div class="icon-chip">{{ group.icon }}</div>
+              <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
               <div>
-                <h3>{{ group.name }}</h3>
-                <p>{{ group.members }} members</p>
+                <h3>{{ sidequest.title }}</h3>
+                <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
               </div>
             </div>
-            <p class="desc">{{ group.description }}</p>
+            <p class="desc">{{ sidequest.description }}</p>
             <div class="card-foot">
-              <span class="tag">{{ group.tag }}</span>
-              <span [class]="group.active ? 'status active' : 'status quiet'">
-                {{ group.active ? 'Active' : 'Quiet' }}
+              <span class="tag">{{ sidequest.category || 'General' }}</span>
+              <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
               </span>
             </div>
           </article>
         </section>
 
-        <footer class="env-strip">
-          <p>
-            API: <strong>{{ config.environment.apiBaseUrl }}</strong>
-          </p>
-          <p>
-            Supabase: <strong>{{ config.environment.supabaseUrl }}</strong>
-          </p>
-        </footer>
+        <section class="quest-panel-backdrop" *ngIf="selectedSidequest || detailsLoading" (click)="closeSidequestDetails()">
+          <article class="quest-panel" (click)="$event.stopPropagation()">
+            <button type="button" class="panel-close" (click)="closeSidequestDetails()">Close</button>
+
+            <ng-container *ngIf="selectedSidequest as details; else detailsLoadingOrError">
+              <p class="mono-title">Sidequest details</p>
+              <h2>{{ details.title }}</h2>
+              <p class="meta">{{ details.locationName || 'Campus' }} | {{ details.category || 'General' }}</p>
+
+              <p class="panel-description">{{ details.description }}</p>
+
+              <div class="participant-block">
+                <p class="participant-title">People in this quest ({{ details.participantDisplayNames.length }})</p>
+                <ul *ngIf="details.participantDisplayNames.length > 0; else noParticipants">
+                  <li *ngFor="let participantName of details.participantDisplayNames">{{ participantName }}</li>
+                </ul>
+                <ng-template #noParticipants>
+                  <p class="meta">No participants yet.</p>
+                </ng-template>
+              </div>
+
+              <button
+                type="button"
+                class="join-btn"
+                [disabled]="joiningSidequest || hasJoinedSelectedSidequest() || !isDetailSidequestActive()"
+                (click)="joinSelectedSidequest()"
+              >
+                {{ joinButtonLabel() }}
+              </button>
+              <p class="meta" *ngIf="joinMessage">{{ joinMessage }}</p>
+            </ng-container>
+
+            <ng-template #detailsLoadingOrError>
+              <p class="meta" *ngIf="detailsLoading">Loading sidequest details...</p>
+              <p class="meta" *ngIf="detailsError">{{ detailsError }}</p>
+            </ng-template>
+          </article>
+        </section>
       </main>
     </section>
   `,
   styles: [`
+    :host {
+      display: grid;
+      min-height: calc(100vh - 2rem);
+      align-content: center;
+      padding: 1.25rem 1rem 1.75rem;
+    }
+
     .dashboard-wrap {
       max-width: 1220px;
+      width: 100%;
       margin: 0 auto;
       border: 1px solid rgba(167, 182, 194, 0.46);
       border-radius: 24px;
@@ -249,73 +318,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
       gap: 1rem;
     }
 
-    .sky-chip {
-      position: absolute;
-      top: 0.9rem;
-      right: 1rem;
-      width: 110px;
-      height: 50px;
-      border-radius: 999px;
-      border: 1px solid rgba(111, 150, 167, 0.45);
-      background: rgba(228, 245, 250, 0.8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .sun,
-    .moon {
-      width: 22px;
-      height: 22px;
-      border-radius: 999px;
-      position: absolute;
-      transition: transform 0.35s ease, opacity 0.35s ease;
-    }
-
-    .sun {
-      background: radial-gradient(circle at 35% 35%, #fff1ad 0%, #ffc857 58%, #f9a826 100%);
-      box-shadow: 0 0 0 5px rgba(255, 200, 87, 0.22);
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    .moon {
-      background: radial-gradient(circle at 30% 30%, #f8f9fd 0%, #cfd7ec 70%, #adb8d5 100%);
-      opacity: 0;
-      transform: translateX(44px);
-    }
-
-    .cloud {
-      position: absolute;
-      width: 52px;
-      height: 16px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.8);
-      bottom: 8px;
-      left: 14px;
-    }
-
-    :host-context(body.theme-night) .sky-chip {
-      background: rgba(27, 36, 65, 0.9);
-      border-color: rgba(148, 163, 198, 0.45);
-    }
-
-    :host-context(body.theme-night) .sun {
-      opacity: 0;
-      transform: translateX(-44px);
-    }
-
-    :host-context(body.theme-night) .moon {
-      opacity: 1;
-      transform: translateX(0);
-      box-shadow: -5px -5px 0 rgba(9, 14, 35, 0.25) inset;
-    }
-
-    :host-context(body.theme-night) .cloud {
-      background: rgba(66, 76, 114, 0.8);
-    }
-
     .main-header {
       display: flex;
       justify-content: space-between;
@@ -338,7 +340,7 @@ import { AppConfigService } from '../../core/services/app-config.service';
       justify-content: flex-end;
     }
 
-    .search-pill {
+    .search-input {
       border: 1px solid #c4d4dc;
       background: #f4fafc;
       color: #68818f;
@@ -346,7 +348,12 @@ import { AppConfigService } from '../../core/services/app-config.service';
       padding: 0.48rem 0.86rem;
       font-size: 0.84rem;
       min-width: 180px;
-      text-align: center;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: #2f9bb8;
+      box-shadow: 0 0 0 2px rgba(47, 155, 184, 0.15);
     }
 
     .primary-btn,
@@ -369,19 +376,27 @@ import { AppConfigService } from '../../core/services/app-config.service';
       flex-wrap: wrap;
     }
 
-    .filters span {
+    .filters button {
+      border: 1px solid #cad8df;
+      cursor: pointer;
       font-size: 0.75rem;
       border-radius: 999px;
-      border: 1px solid #cad8df;
       padding: 0.37rem 0.7rem;
       color: #5d7583;
       background: #f3f8fb;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
 
-    .filters span.active {
+    .filters button.active {
       border-color: #2f9bb8;
       color: #0f5569;
       background: #ddf3f9;
+    }
+
+    .filters button:hover {
+      border-color: #76b6c9;
+      color: #1c6277;
+      background: #e8f6fb;
     }
 
     .banner {
@@ -427,6 +442,13 @@ import { AppConfigService } from '../../core/services/app-config.service';
       padding: 0.9rem;
       animation: card-rise 0.42s ease both;
       animation-delay: var(--delay, 0ms);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .group-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(17, 59, 77, 0.14);
     }
 
     .card-top {
@@ -495,26 +517,90 @@ import { AppConfigService } from '../../core/services/app-config.service';
       color: #778c99;
     }
 
-    .env-strip {
-      margin-top: 0.1rem;
+    .quest-panel-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 19, 27, 0.44);
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.6rem;
+      place-items: center;
+      z-index: 60;
+      padding: 1rem;
     }
 
-    .env-strip p {
+    .quest-panel {
+      width: min(680px, 96vw);
+      max-height: 88vh;
+      overflow-y: auto;
+      border-radius: 18px;
+      background: #fafdff;
+      border: 1px solid #c6d9e3;
+      box-shadow: 0 22px 50px rgba(10, 32, 44, 0.28);
+      padding: 1.1rem 1.2rem 1.2rem;
+    }
+
+    .panel-close {
+      border: 1px solid #b8d2df;
+      background: #edf8fc;
+      color: #0f5569;
+      border-radius: 10px;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin-left: auto;
+      display: block;
+      cursor: pointer;
+    }
+
+    .panel-description {
+      margin: 0.7rem 0 0;
+      color: #34505f;
+      line-height: 1.5;
+      font-size: 0.93rem;
+    }
+
+    .participant-block {
+      margin-top: 0.85rem;
+      border: 1px solid #d3e4eb;
+      border-radius: 12px;
+      background: #f5fbfe;
+      padding: 0.75rem;
+    }
+
+    .participant-title {
       margin: 0;
-      font-size: 0.74rem;
-      padding: 0.52rem 0.62rem;
-      border-radius: 9px;
-      border: 1px solid #cfdde4;
-      background: #f8fcfd;
-      color: #58707f;
-      word-break: break-all;
+      color: #14384a;
+      font-size: 0.83rem;
+      font-weight: 700;
     }
 
-    .env-strip strong {
-      color: #19384a;
+    .participant-block ul {
+      margin: 0.55rem 0 0;
+      padding-left: 1rem;
+      display: grid;
+      gap: 0.32rem;
+    }
+
+    .participant-block li {
+      color: #3f5b6a;
+      font-size: 0.82rem;
+    }
+
+    .join-btn {
+      margin-top: 0.9rem;
+      width: 100%;
+      border: none;
+      border-radius: 11px;
+      padding: 0.7rem 0.8rem;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #f2fbff;
+      background: linear-gradient(145deg, #0f6378, #2887a0);
+      cursor: pointer;
+    }
+
+    .join-btn[disabled] {
+      opacity: 0.65;
+      cursor: not-allowed;
     }
 
     @keyframes card-rise {
@@ -535,6 +621,12 @@ import { AppConfigService } from '../../core/services/app-config.service';
     }
 
     @media (max-width: 900px) {
+      :host {
+        min-height: auto;
+        align-content: start;
+        padding: 0.75rem 0.75rem 1rem;
+      }
+
       .dashboard-wrap {
         grid-template-columns: 1fr;
       }
@@ -545,7 +637,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
       }
 
       .main-header {
-        margin-top: 2.25rem;
         flex-direction: column;
         align-items: flex-start;
       }
@@ -555,16 +646,12 @@ import { AppConfigService } from '../../core/services/app-config.service';
         justify-content: flex-start;
       }
 
-      .search-pill {
+      .search-input {
         flex: 1;
         min-width: 0;
       }
 
       .group-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .env-strip {
         grid-template-columns: 1fr;
       }
     }
@@ -574,11 +661,6 @@ import { AppConfigService } from '../../core/services/app-config.service';
         padding: 1rem;
       }
 
-      .sky-chip {
-        right: 0.9rem;
-        width: 90px;
-      }
-
       .banner {
         flex-direction: column;
         align-items: flex-start;
@@ -586,57 +668,253 @@ import { AppConfigService } from '../../core/services/app-config.service';
     }
   `]
 })
-export class HomePageComponent {
-  protected readonly config = inject(AppConfigService);
+export class HomePageComponent implements OnInit, OnDestroy {
+  private readonly sidequestApi = inject(SidequestApiService);
+  private readonly authApi = inject(AuthApiService);
+  private refreshTimer?: ReturnType<typeof setInterval>;
 
-  protected readonly groups = [
-    {
-      icon: 'SC',
-      name: 'Pickup soccer',
-      members: 24,
-      description: 'Weekday games by the rec fields. All skill levels welcome.',
-      tag: 'Sports',
-      active: true
-    },
-    {
-      icon: 'ST',
-      name: 'CS 377 study group',
-      members: 18,
-      description: 'Operating systems midterm prep at DuBois tonight.',
-      tag: 'Study',
-      active: true
-    },
-    {
-      icon: 'GM',
-      name: 'Late night gaming',
-      members: 31,
-      description: 'Valorant, Smash, and pickup sessions after 10pm.',
-      tag: 'Gaming',
-      active: false
-    },
-    {
-      icon: 'MU',
-      name: 'Music production',
-      members: 9,
-      description: 'Share beats, collaborate, and get fast feedback.',
-      tag: 'Social',
-      active: false
-    },
-    {
-      icon: 'FD',
-      name: 'Food adventures',
-      members: 42,
-      description: 'Explore Amherst spots and host weekend cooking hangs.',
-      tag: 'Events',
-      active: true
-    },
-    {
-      icon: 'RN',
-      name: 'Morning run club',
-      members: 15,
-      description: 'Daily sunrise runs around campus pond.',
-      tag: 'Sports',
-      active: false
+  private allSidequests: DiscoverSidequestResponse[] = [];
+  protected sidequests: DiscoverSidequestResponse[] = [];
+  protected featuredSidequest: DiscoverSidequestResponse | null = null;
+  protected discoveredCategories: string[] = [];
+  protected myQuestTitles: string[] = [];
+  protected selectedCategory: string | null = null;
+  protected searchTerm = '';
+  protected displayName = 'Profile';
+  protected userInitial = 'P';
+  protected currentUserId: string | null = null;
+  protected selectedSidequest: SidequestResponse | null = null;
+  protected detailsLoading = false;
+  protected detailsError = '';
+  protected joiningSidequest = false;
+  protected joinMessage = '';
+  protected isLoading = false;
+  protected errorMessage = '';
+
+  ngOnInit(): void {
+    this.loadCurrentUser();
+    this.loadSidequests(true);
+    this.refreshTimer = setInterval(() => this.loadSidequests(false), 30000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
     }
-  ];
+
+  }
+
+  protected applyCategoryFilter(category: string | null): void {
+    this.selectedCategory = category;
+    this.applyClientFilters();
+  }
+
+  protected onSearchChange(): void {
+    this.applyClientFilters();
+  }
+
+  protected getCategoryInitial(category: string | null | undefined): string {
+    if (!category || !category.trim()) {
+      return 'SQ';
+    }
+
+    return category.trim().slice(0, 2).toUpperCase();
+  }
+
+  protected isSidequestActive(sidequest: DiscoverSidequestResponse): boolean {
+    return sidequest.status.toLowerCase() === 'active';
+  }
+
+  protected getRelativeTime(isoTime: string): string {
+    const eventTime = new Date(isoTime).getTime();
+    const deltaMinutes = Math.max(0, Math.floor((Date.now() - eventTime) / 60000));
+
+    if (deltaMinutes < 1) {
+      return 'just now';
+    }
+
+    if (deltaMinutes < 60) {
+      return `${deltaMinutes} min ago`;
+    }
+
+    const deltaHours = Math.floor(deltaMinutes / 60);
+    if (deltaHours < 24) {
+      return `${deltaHours} hr ago`;
+    }
+
+    const deltaDays = Math.floor(deltaHours / 24);
+    return `${deltaDays} day${deltaDays > 1 ? 's' : ''} ago`;
+  }
+
+  protected openSidequestDetails(sidequest: DiscoverSidequestResponse): void {
+    this.detailsLoading = true;
+    this.detailsError = '';
+    this.joinMessage = '';
+    this.selectedSidequest = null;
+
+    this.sidequestApi.getById(sidequest.id).pipe(finalize(() => (this.detailsLoading = false))).subscribe({
+      next: (response) => {
+        this.selectedSidequest = response;
+      },
+      error: () => {
+        this.detailsError = 'Unable to load sidequest details right now.';
+      }
+    });
+  }
+
+  protected closeSidequestDetails(): void {
+    this.selectedSidequest = null;
+    this.detailsError = '';
+    this.joinMessage = '';
+    this.detailsLoading = false;
+  }
+
+  protected joinSelectedSidequest(): void {
+    if (!this.selectedSidequest || this.joiningSidequest || this.hasJoinedSelectedSidequest()) {
+      return;
+    }
+
+    this.joiningSidequest = true;
+    this.joinMessage = '';
+
+    this.sidequestApi
+      .join(this.selectedSidequest.id)
+      .pipe(finalize(() => (this.joiningSidequest = false)))
+      .subscribe({
+        next: (response) => {
+          this.selectedSidequest = response;
+          this.joinMessage = 'You joined this quest.';
+          this.loadSidequests(false);
+        },
+        error: () => {
+          this.joinMessage = 'Unable to join this quest right now.';
+        }
+      });
+  }
+
+  protected hasJoinedSelectedSidequest(): boolean {
+    if (!this.selectedSidequest || !this.currentUserId) {
+      return false;
+    }
+
+    return this.selectedSidequest.participantUserIds.includes(this.currentUserId);
+  }
+
+  protected isDetailSidequestActive(): boolean {
+    if (!this.selectedSidequest) {
+      return false;
+    }
+
+    return this.selectedSidequest.status.toLowerCase() === 'active';
+  }
+
+  protected joinButtonLabel(): string {
+    if (this.joiningSidequest) {
+      return 'Joining...';
+    }
+
+    if (!this.selectedSidequest) {
+      return 'Join quest';
+    }
+
+    if (!this.isDetailSidequestActive()) {
+      return 'Quest closed';
+    }
+
+    if (this.hasJoinedSelectedSidequest()) {
+      return 'Joined';
+    }
+
+    return 'Join quest';
+  }
+
+  private loadSidequests(showLoader: boolean): void {
+    if (showLoader) {
+      this.isLoading = true;
+    }
+
+    this.errorMessage = '';
+
+    this.sidequestApi
+      .discover({
+        limit: 120,
+        offset: 0
+      })
+      .pipe(finalize(() => (this.isLoading = false)))
+      .subscribe({
+        next: (response) => {
+          this.allSidequests = response;
+
+          const categories = new Set<string>(
+            response
+              .map((sidequest) => this.normalizeCategory(sidequest.category))
+              .filter((category): category is string => Boolean(category))
+          );
+          this.discoveredCategories = Array.from(categories).slice(0, 5);
+          this.applyClientFilters();
+        },
+        error: () => {
+          this.errorMessage = 'Unable to load sidequests right now.';
+          this.allSidequests = [];
+          this.sidequests = [];
+          this.featuredSidequest = null;
+          this.discoveredCategories = [];
+          this.myQuestTitles = [];
+        }
+      });
+  }
+
+  private applyClientFilters(): void {
+    const normalizedSearch = this.searchTerm.trim().toLowerCase();
+    const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
+
+    this.sidequests = this.allSidequests.filter((sidequest) => {
+      const sidequestCategory = sidequest.category?.trim().toLowerCase() ?? '';
+      const matchesCategory = !normalizedCategory || sidequestCategory === normalizedCategory;
+
+      if (!matchesCategory) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [sidequest.title, sidequest.description, sidequest.category, sidequest.locationName]
+        .filter((value): value is string => Boolean(value))
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+
+    this.featuredSidequest = this.sidequests.length > 0 ? this.sidequests[0] : null;
+    this.myQuestTitles = this.sidequests.slice(0, 3).map((sidequest) => sidequest.title);
+  }
+
+  private loadCurrentUser(): void {
+    this.authApi.getCurrentUser().subscribe({
+      next: (user) => {
+        const preferredName = user.fullName || user.username || user.email || 'Profile';
+        this.displayName = preferredName;
+        this.userInitial = preferredName.charAt(0).toUpperCase();
+        this.currentUserId = user.userId;
+      },
+      error: () => {
+        const fallbackEmail = localStorage.getItem('bloc.userEmail') || 'Profile';
+        this.displayName = fallbackEmail;
+        this.userInitial = this.displayName.charAt(0).toUpperCase();
+        this.currentUserId = localStorage.getItem('bloc.userId');
+      }
+    });
+  }
+
+  private normalizeCategory(category: string | null | undefined): string | null {
+    if (!category || !category.trim()) {
+      return null;
+    }
+
+    const trimmed = category.trim().toLowerCase();
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  }
 }
