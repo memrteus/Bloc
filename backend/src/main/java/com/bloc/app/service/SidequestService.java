@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
+import com.bloc.app.model.Sidequest;
 import com.bloc.app.repository.SidequestRepository;
 import com.bloc.app.security.AuthenticatedUser;
 
@@ -64,8 +65,11 @@ public class SidequestService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sidequest not found.");
         }
 
-        if (!sidequestRepository.participantExists(parsedSidequestId, user.userId())) {
-            sidequestRepository.addParticipant(parsedSidequestId, user.userId(), "participant");
+        Sidequest sidequest = sidequestRepository.getRequiredSidequest(parsedSidequestId);
+        validateJoinRequest(sidequest, user);
+
+        if (!sidequestRepository.addParticipant(parsedSidequestId, user.userId(), "participant")) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You have already joined this sidequest.");
         }
 
         return SidequestResponse.fromModel(sidequestRepository.getRequiredSidequest(parsedSidequestId));
@@ -82,6 +86,16 @@ public class SidequestService {
     private void validateCreateRequest(CreateSidequestRequest request) {
         if (request.maxParticipants() != null && request.maxParticipants() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants must be at least 1.");
+        }
+    }
+
+    private void validateJoinRequest(Sidequest sidequest, AuthenticatedUser user) {
+        if (sidequest.creatorId().equals(user.userId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot join your own sidequest.");
+        }
+
+        if (sidequest.participantUserIds().contains(user.userId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You have already joined this sidequest.");
         }
     }
 

@@ -203,8 +203,8 @@ public class SidequestRepository {
         return sidequestId;
     }
 
-    public void addParticipant(UUID sidequestId, UUID userId, String role) {
-        jdbcTemplate.update(
+    public boolean addParticipant(UUID sidequestId, UUID userId, String role) {
+        int rowsInserted = jdbcTemplate.update(
                 """
                 insert into sidequest_participants (
                     id,
@@ -226,6 +226,8 @@ public class SidequestRepository {
                         .addValue("sidequestId", sidequestId)
                         .addValue("userId", userId)
                         .addValue("role", role));
+
+        return rowsInserted > 0;
     }
 
     public boolean sidequestExists(UUID sidequestId) {
