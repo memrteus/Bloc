@@ -70,6 +70,8 @@ public class SidequestRepository {
                     created_at,
                     updated_at
                 from sidequests
+                where status = 'active'
+                  and (expires_at is null or expires_at > now())
                 order by created_at desc
                 """,
                 SIDEQUEST_ROW_MAPPER);
