@@ -1,6 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", sans-serif;
+  font-family: 'Outfit', sans-serif;
 }
 
 * {
@@ -9,8 +11,80 @@
 
 body {
   margin: 0;
-  background: #f5f7fb;
-  color: #1f2937;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  color: #182938;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.theme-day {
+  background: linear-gradient(180deg, #a9e2ff 0%, #ccf1ff 52%, #c9efc6 100%);
+}
+
+body.theme-day::before {
+  width: 120px;
+  height: 120px;
+  top: 30px;
+  right: 38px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, #fff5be 0%, #ffd460 58%, #f3ad31 100%);
+  box-shadow: 0 0 0 14px rgba(255, 212, 96, 0.25);
+}
+
+body.theme-day::after {
+  width: 110vw;
+  height: 190px;
+  left: -5vw;
+  bottom: -58px;
+  border-radius: 50% 50% 0 0;
+  background:
+    radial-gradient(circle at 30% 40%, #7cc772 0%, #65b95b 55%, #58ab4f 100%),
+    linear-gradient(180deg, #74c06c 0%, #5dac53 100%);
+}
+
+body.theme-night {
+  background: linear-gradient(180deg, #0f1330 0%, #171c3f 50%, #222d57 100%);
+  color: #d9e5ff;
+}
+
+body.theme-night::before {
+  width: 106px;
+  height: 106px;
+  top: 34px;
+  right: 42px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, #f7f9ff 0%, #d6def4 65%, #b6c3e3 100%);
+  box-shadow:
+    -18px -8px 0 rgba(15, 19, 48, 0.6) inset,
+    -310px 140px 0 -50px rgba(245, 250, 255, 0.55),
+    -120px 210px 0 -56px rgba(245, 250, 255, 0.42),
+    -260px 35px 0 -57px rgba(245, 250, 255, 0.45),
+    -420px 250px 0 -52px rgba(245, 250, 255, 0.42);
+}
+
+body.theme-night::after {
+  width: 112vw;
+  height: 210px;
+  left: -6vw;
+  bottom: -70px;
+  border-radius: 50% 50% 0 0;
+  background:
+    radial-gradient(circle at 26% 52%, #2f4a72 0%, #273f66 55%, #20355b 100%),
+    linear-gradient(180deg, #2d486f 0%, #233a60 100%);
+}
+
+app-root {
+  display: block;
+  position: relative;
+  z-index: 1;
 }
 
 a {
