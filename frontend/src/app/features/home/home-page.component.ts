@@ -5,7 +5,22 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { AuthApiService } from '../../core/services/auth-api.service';
-import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } from '../../core/services/sidequest-api.service';
+import {
+  CreateSidequestRequest,
+  DiscoverSidequestResponse,
+  SidequestApiService,
+  SidequestResponse
+} from '../../core/services/sidequest-api.service';
+
+interface CreateSidequestForm {
+  title: string;
+  description: string;
+  category: string;
+  locationName: string;
+  latitude: number | null;
+  longitude: number | null;
+  maxParticipants: number | null;
+}
 
 @Component({
   selector: 'app-home-page',
@@ -25,7 +40,7 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
         <nav class="menu">
           <a class="menu-item active" routerLink="/home">Browse groups</a>
           <a class="menu-item" routerLink="/map">Map</a>
-          <a class="menu-item" routerLink="/create-sidequest">Create sidequest</a>
+          <button type="button" class="menu-item menu-create-btn" (click)="openCreateSidequestPanel()">Create sidequest</button>
           <a class="menu-item" routerLink="/profile">Profile</a>
         </nav>
 
@@ -58,7 +73,7 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
-            <a routerLink="/create-sidequest" class="primary-btn">+ Sidequest</a>
+            <button type="button" class="primary-btn" (click)="openCreateSidequestPanel()">Create sidequest</button>
           </div>
         </header>
 
@@ -125,6 +140,73 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
                 {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
               </span>
             </div>
+          </article>
+        </section>
+
+        <section class="quest-panel-backdrop" *ngIf="showCreatePanel" (click)="closeCreateSidequestPanel()">
+          <article class="quest-panel" (click)="$event.stopPropagation()">
+            <button type="button" class="panel-close" (click)="closeCreateSidequestPanel()">Close</button>
+
+            <p class="mono-title">Create sidequest</p>
+            <h2>Create a new group</h2>
+
+            <form class="simple-create-form" (ngSubmit)="submitCreateSidequest()">
+              <label>
+                Title
+                <input name="title" type="text" [(ngModel)]="createForm.title" required minlength="3" placeholder="Soccer pickup game" />
+              </label>
+
+              <label>
+                Description
+                <textarea
+                  name="description"
+                  [(ngModel)]="createForm.description"
+                  required
+                  minlength="10"
+                  rows="4"
+                  placeholder="Meet at the rec field for a quick game."
+                ></textarea>
+              </label>
+
+              <label>
+                Category
+                <input name="category" type="text" [(ngModel)]="createForm.category" required placeholder="Sports" />
+              </label>
+
+              <label>
+                Location
+                <input name="locationName" type="text" [(ngModel)]="createForm.locationName" required placeholder="Campus rec field" />
+              </label>
+
+              <label>
+                Max participants
+                <input name="maxParticipants" type="number" min="1" [(ngModel)]="createForm.maxParticipants" />
+              </label>
+
+              <p class="meta">Coordinates are optional.</p>
+
+              <div class="coordinates-row">
+                <label>
+                  Latitude
+                  <input name="latitude" type="number" step="0.000001" [(ngModel)]="createForm.latitude" />
+                </label>
+
+                <label>
+                  Longitude
+                  <input name="longitude" type="number" step="0.000001" [(ngModel)]="createForm.longitude" />
+                </label>
+              </div>
+
+              <div class="panel-errors" *ngIf="createErrors.length > 0">
+                <p class="participant-title">Please fix these fields:</p>
+                <ul>
+                  <li *ngFor="let error of createErrors">{{ error }}</li>
+                </ul>
+              </div>
+
+              <button type="submit" class="join-btn" [disabled]="creatingSidequest">{{ creatingSidequest ? 'Creating...' : 'Create sidequest' }}</button>
+              <p class="meta" *ngIf="createMessage">{{ createMessage }}</p>
+            </form>
           </article>
         </section>
 
@@ -239,10 +321,14 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
     .menu-item {
       text-decoration: none;
       color: #b7d1dc;
+      border: 0;
       border-radius: 10px;
       padding: 0.58rem 0.7rem;
       font-size: 0.9rem;
       transition: background 0.15s ease, color 0.15s ease;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
     }
 
     .menu-item:hover {
@@ -558,6 +644,57 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
       font-size: 0.93rem;
     }
 
+    .simple-create-form {
+      margin-top: 0.8rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .simple-create-form label {
+      display: grid;
+      gap: 0.35rem;
+      color: #14384a;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .simple-create-form input,
+    .simple-create-form textarea {
+      border: 1px solid #c4d6df;
+      border-radius: 10px;
+      padding: 0.56rem 0.68rem;
+      background: #f9fdff;
+      color: #123345;
+      font: inherit;
+    }
+
+    .simple-create-form textarea {
+      resize: vertical;
+      min-height: 92px;
+    }
+
+    .coordinates-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+
+    .panel-errors {
+      border: 1px solid #f1c3c3;
+      border-radius: 12px;
+      background: #fff7f7;
+      padding: 0.65rem 0.75rem;
+    }
+
+    .panel-errors ul {
+      margin: 0.45rem 0 0;
+      padding-left: 1rem;
+      display: grid;
+      gap: 0.22rem;
+      color: #7f2d2d;
+      font-size: 0.8rem;
+    }
+
     .participant-block {
       margin-top: 0.85rem;
       border: 1px solid #d3e4eb;
@@ -661,6 +798,10 @@ import { DiscoverSidequestResponse, SidequestApiService, SidequestResponse } fro
         padding: 1rem;
       }
 
+      .coordinates-row {
+        grid-template-columns: 1fr;
+      }
+
       .banner {
         flex-direction: column;
         align-items: flex-start;
@@ -688,8 +829,21 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected detailsError = '';
   protected joiningSidequest = false;
   protected joinMessage = '';
+  protected showCreatePanel = false;
+  protected creatingSidequest = false;
+  protected createErrors: string[] = [];
+  protected createMessage = '';
   protected isLoading = false;
   protected errorMessage = '';
+  protected createForm: CreateSidequestForm = {
+    title: '',
+    description: '',
+    category: '',
+    locationName: '',
+    latitude: null,
+    longitude: null,
+    maxParticipants: 8
+  };
 
   ngOnInit(): void {
     this.loadCurrentUser();
@@ -762,6 +916,23 @@ export class HomePageComponent implements OnInit, OnDestroy {
     });
   }
 
+  protected openCreateSidequestPanel(): void {
+    this.closeSidequestDetails();
+    this.showCreatePanel = true;
+    this.createErrors = [];
+    this.createMessage = '';
+  }
+
+  protected closeCreateSidequestPanel(): void {
+    if (this.creatingSidequest) {
+      return;
+    }
+
+    this.showCreatePanel = false;
+    this.createErrors = [];
+    this.createMessage = '';
+  }
+
   protected closeSidequestDetails(): void {
     this.selectedSidequest = null;
     this.detailsError = '';
@@ -788,6 +959,41 @@ export class HomePageComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.joinMessage = 'Unable to join this quest right now.';
+        }
+      });
+  }
+
+  protected submitCreateSidequest(): void {
+    if (this.creatingSidequest) {
+      return;
+    }
+
+    const payload = this.buildCreateSidequestPayload();
+    if (!payload) {
+      return;
+    }
+
+    this.creatingSidequest = true;
+    this.createMessage = '';
+
+    this.sidequestApi
+      .create(payload)
+      .pipe(finalize(() => (this.creatingSidequest = false)))
+      .subscribe({
+        next: (response) => {
+          this.createMessage = 'Sidequest created.';
+          this.showCreatePanel = false;
+          this.resetCreateForm();
+          this.selectedSidequest = response;
+          this.detailsError = '';
+          this.detailsLoading = false;
+          this.joinMessage = '';
+          this.loadSidequests(false);
+        },
+        error: (error: unknown) => {
+          const fallbackMessage = 'Unable to create sidequest right now.';
+          const message = this.extractErrorMessage(error) || fallbackMessage;
+          this.createErrors = [message];
         }
       });
   }
@@ -826,6 +1032,79 @@ export class HomePageComponent implements OnInit, OnDestroy {
     }
 
     return 'Join quest';
+  }
+
+  private buildCreateSidequestPayload(): CreateSidequestRequest | null {
+    this.createErrors = [];
+
+    const title = this.createForm.title.trim();
+    const description = this.createForm.description.trim();
+    const category = this.createForm.category.trim();
+    const locationName = this.createForm.locationName.trim();
+    const maxParticipants = this.createForm.maxParticipants;
+
+    if (!title) {
+      this.createErrors.push('Title is required.');
+    }
+
+    if (!description) {
+      this.createErrors.push('Description is required.');
+    }
+
+    if (!category) {
+      this.createErrors.push('Category is required.');
+    }
+
+    if (!locationName) {
+      this.createErrors.push('Location is required.');
+    }
+
+    if (maxParticipants !== null && maxParticipants !== undefined && maxParticipants < 1) {
+      this.createErrors.push('Max participants must be at least 1.');
+    }
+
+    if (this.createErrors.length > 0) {
+      return null;
+    }
+
+    return {
+      title,
+      description,
+      category,
+      locationName,
+      latitude: this.createForm.latitude,
+      longitude: this.createForm.longitude,
+      maxParticipants: maxParticipants ?? null
+    };
+  }
+
+  private resetCreateForm(): void {
+    this.createForm = {
+      title: '',
+      description: '',
+      category: '',
+      locationName: '',
+      latitude: null,
+      longitude: null,
+      maxParticipants: 8
+    };
+  }
+
+  private extractErrorMessage(error: unknown): string | null {
+    if (!error || typeof error !== 'object') {
+      return null;
+    }
+
+    const errorValue = error as { error?: { message?: string }; message?: string };
+    if (errorValue.error?.message && errorValue.error.message.trim()) {
+      return errorValue.error.message.trim();
+    }
+
+    if (errorValue.message && errorValue.message.trim()) {
+      return errorValue.message.trim();
+    }
+
+    return null;
   }
 
   private loadSidequests(showLoader: boolean): void {
