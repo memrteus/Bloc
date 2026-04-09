@@ -1,16 +1,21 @@
 package com.bloc.app.controller;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.SidequestService;
@@ -23,6 +28,15 @@ public class SidequestController {
 
     public SidequestController(SidequestService sidequestService) {
         this.sidequestService = sidequestService;
+    }
+
+    @GetMapping("/discover")
+    public List<DiscoverSidequestResponse> discoverSidequests(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+        return sidequestService.discoverSidequests(search, category, limit, offset);
     }
 
     @PostMapping

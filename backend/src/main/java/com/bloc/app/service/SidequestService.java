@@ -1,6 +1,7 @@
 package com.bloc.app.service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.repository.SidequestRepository;
 import com.bloc.app.security.AuthenticatedUser;
@@ -22,13 +24,29 @@ public class SidequestService {
         this.sidequestRepository = sidequestRepository;
     }
 
+    @Transactional(readOnly = true)
+    public List<DiscoverSidequestResponse> discoverSidequests(String search, String category, int limit, int offset) {
+        String normalizedSearch = search != null && !search.isBlank() ? search.trim() : null;
+        String normalizedCategory = category != null && !category.isBlank() ? category.trim() : null;
+        validateDiscoveryPagination(limit, offset);
+
+        return sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(
+                        normalizedSearch,
+                        normalizedCategory,
+                        limit,
+                        offset)
+                .stream()
+                .map(DiscoverSidequestResponse::fromModel)
+                .toList();
+    }
+
     @Transactional
     public SidequestResponse createSidequest(CreateSidequestRequest request, AuthenticatedUser user) {
         ensureProfileExists(user);
         validateCreateRequest(request);
 
-        Instant startsAt = request.startsAt() != null ? request.startsAt() : Instant.now();
-        Instant expiresAt = request.expiresAt() != null ? request.expiresAt() : startsAt.plusSeconds(24 * 60 * 60);
+        Instant startsAt = Instant.now();
+        Instant expiresAt = startsAt.plusSeconds(24 * 60 * 60);
         int maxParticipants = request.maxParticipants() != null ? request.maxParticipants() : 8;
 
         UUID sidequestId = sidequestRepository.insertSidequest(request, user.userId(), startsAt, expiresAt, maxParticipants);
@@ -62,12 +80,18 @@ public class SidequestService {
     }
 
     private void validateCreateRequest(CreateSidequestRequest request) {
-        if (request.expiresAt() != null && request.startsAt() != null && !request.expiresAt().isAfter(request.startsAt())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiresAt must be after startsAt.");
-        }
-
         if (request.maxParticipants() != null && request.maxParticipants() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants must be at least 1.");
+        }
+    }
+
+    private void validateDiscoveryPagination(int limit, int offset) {
+        if (limit < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be at least 0.");
+        }
+
+        if (offset < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "offset must be at least 0.");
         }
     }
 

@@ -51,6 +51,97 @@ public class SidequestRepository {
         return count != null && count > 0;
     }
 
+    public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(
+            String search,
+            String category,
+            int limit,
+            int offset) {
+        DiscoveryQuery discoveryQuery = buildDiscoverableSidequestsQuery(search, category, limit, offset);
+
+        List<SidequestRow> rows = jdbcTemplate.query(
+                discoveryQuery.sql(),
+                discoveryQuery.parameters(),
+                SIDEQUEST_ROW_MAPPER);
+
+        return rows.stream()
+                .map(row -> new Sidequest(
+                        row.id(),
+                        row.creatorId(),
+                        row.title(),
+                        row.description(),
+                        row.category(),
+                        row.locationName(),
+                        row.latitude(),
+                        row.longitude(),
+                        row.startsAt(),
+                        row.expiresAt(),
+                        row.maxParticipants(),
+                        row.status(),
+                        row.createdAt(),
+                        row.updatedAt(),
+                        getParticipantUserIds(row.id())))
+                .toList();
+    }
+
+    DiscoveryQuery buildDiscoverableSidequestsQuery(
+            String search,
+            String category,
+            int limit,
+            int offset) {
+        String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
+        String normalizedCategory = category != null ? category.toLowerCase() : null;
+        StringBuilder sql = new StringBuilder("""
+                select
+                    id,
+                    creator_id,
+                    title,
+                    description,
+                    category,
+                    location_name,
+                    latitude,
+                    longitude,
+                    starts_at,
+                    expires_at,
+                    max_participants,
+                    status,
+                    created_at,
+                    updated_at
+                from sidequests
+                where status = 'active'
+                  and (expires_at is null or expires_at > now())
+                """);
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+
+        if (normalizedCategory != null) {
+            sql.append("""
+                      and lower(category) = :category
+                    """);
+            parameters.addValue("category", normalizedCategory);
+        }
+
+        if (searchPattern != null) {
+            sql.append("""
+                      and (
+                        lower(title) like :searchPattern
+                        or lower(description) like :searchPattern
+                    or lower(location_name) like :searchPattern
+                      )
+                    """);
+            parameters.addValue("searchPattern", searchPattern);
+        }
+
+        sql.append("""
+                order by created_at desc
+                limit :limit
+                offset :offset
+                """);
+        parameters.addValue("limit", limit);
+        parameters.addValue("offset", offset);
+
+        return new DiscoveryQuery(sql.toString(), parameters);
+    }
+
     public UUID insertSidequest(
             CreateSidequestRequest request,
             UUID creatorId,
@@ -184,16 +275,6 @@ public class SidequestRepository {
                 Map.of("sidequestId", sidequestId),
                 SIDEQUEST_ROW_MAPPER);
 
-        List<UUID> participantUserIds = jdbcTemplate.query(
-                """
-                select user_id
-                from sidequest_participants
-                where sidequest_id = :sidequestId
-                order by joined_at asc
-                """,
-                Map.of("sidequestId", sidequestId),
-                (resultSet, rowNum) -> resultSet.getObject("user_id", UUID.class));
-
         return new Sidequest(
                 row.id(),
                 row.creatorId(),
@@ -209,7 +290,19 @@ public class SidequestRepository {
                 row.status(),
                 row.createdAt(),
                 row.updatedAt(),
-                participantUserIds);
+                getParticipantUserIds(sidequestId));
+    }
+
+    private List<UUID> getParticipantUserIds(UUID sidequestId) {
+        return jdbcTemplate.query(
+                """
+                select user_id
+                from sidequest_participants
+                where sidequest_id = :sidequestId
+                order by joined_at asc
+                """,
+                Map.of("sidequestId", sidequestId),
+                (resultSet, rowNum) -> resultSet.getObject("user_id", UUID.class));
     }
 
     private static Instant toInstant(ResultSet resultSet, String columnName) throws SQLException {
@@ -232,5 +325,8 @@ public class SidequestRepository {
             String status,
             Instant createdAt,
             Instant updatedAt) {
+    }
+
+    record DiscoveryQuery(String sql, MapSqlParameterSource parameters) {
     }
 }
