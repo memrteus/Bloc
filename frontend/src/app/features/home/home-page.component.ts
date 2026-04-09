@@ -38,9 +38,9 @@ interface CreateSidequestForm {
         </div>
 
         <nav class="menu">
-          <a class="menu-item active" routerLink="/home">Browse groups</a>
+          <button type="button" class="menu-item" [class.active]="activeMainTab === 'discover'" (click)="showDiscoverTab()">Browse groups</button>
           <a class="menu-item" routerLink="/map">Map</a>
-          <button type="button" class="menu-item menu-create-btn" (click)="openCreateSidequestPanel()">Create sidequest</button>
+          <button type="button" class="menu-item" [class.active]="activeMainTab === 'create'" (click)="showCreateTab()">Create sidequest</button>
           <a class="menu-item" routerLink="/profile">Profile</a>
         </nav>
 
@@ -62,10 +62,10 @@ interface CreateSidequestForm {
       <main class="dashboard-main">
         <header class="main-header">
           <div>
-            <p class="mono-title">Community feed</p>
-            <h1>Browse groups</h1>
+            <p class="mono-title">{{ activeMainTab === 'discover' ? 'Community feed' : 'Create sidequest' }}</p>
+            <h1>{{ activeMainTab === 'discover' ? 'Browse groups' : 'Create sidequest' }}</h1>
           </div>
-          <div class="header-actions">
+          <div class="header-actions" *ngIf="activeMainTab === 'discover'">
             <input
               class="search-input"
               type="search"
@@ -73,80 +73,83 @@ interface CreateSidequestForm {
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
-            <button type="button" class="primary-btn" (click)="openCreateSidequestPanel()">Create sidequest</button>
+            <button type="button" class="primary-btn" (click)="showCreateTab()">Create sidequest</button>
+          </div>
+          <div class="header-actions" *ngIf="activeMainTab === 'create'">
+            <button type="button" class="primary-btn" (click)="showDiscoverTab()">Back to discovery</button>
           </div>
         </header>
 
-        <div class="filters">
-          <button
-            type="button"
-            [class.active]="selectedCategory === null"
-            (click)="applyCategoryFilter(null)"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            *ngFor="let category of discoveredCategories"
-            [class.active]="selectedCategory === category"
-            (click)="applyCategoryFilter(category)"
-          >
-            {{ category }}
-          </button>
-        </div>
-
-        <article class="banner">
-          <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
-            <p class="mono-title">Sidequest nearby</p>
-            <h2>{{ featured.title }}</h2>
-            <p class="meta">
-              {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
-            </p>
+        <ng-container *ngIf="activeMainTab === 'discover'; else createTabContent">
+          <div class="filters">
+            <button
+              type="button"
+              [class.active]="selectedCategory === null"
+              (click)="applyCategoryFilter(null)"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              *ngFor="let category of discoveredCategories"
+              [class.active]="selectedCategory === category"
+              (click)="applyCategoryFilter(category)"
+            >
+              {{ category }}
+            </button>
           </div>
-          <ng-template #noFeaturedSidequest>
-            <div>
+
+          <article class="banner">
+            <div *ngIf="featuredSidequest as featured; else noFeaturedSidequest">
               <p class="mono-title">Sidequest nearby</p>
-              <h2>No active sidequests yet</h2>
-              <p class="meta">Create one to get discovery started.</p>
+              <h2>{{ featured.title }}</h2>
+              <p class="meta">
+                {{ featured.locationName || 'Campus' }} | {{ featured.category || 'General' }} | {{ getRelativeTime(featured.createdAt) }}
+              </p>
             </div>
-          </ng-template>
-          <a routerLink="/map" class="ghost-btn">View</a>
-        </article>
-
-        <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
-        <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
-
-        <section class="group-grid">
-          <article
-            class="group-card"
-            *ngFor="let sidequest of sidequests; index as i"
-            [style.--delay.ms]="i * 45"
-            role="button"
-            tabindex="0"
-            (click)="openSidequestDetails(sidequest)"
-            (keydown.enter)="openSidequestDetails(sidequest)"
-          >
-            <div class="card-top">
-              <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+            <ng-template #noFeaturedSidequest>
               <div>
-                <h3>{{ sidequest.title }}</h3>
-                <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                <p class="mono-title">Sidequest nearby</p>
+                <h2>No active sidequests yet</h2>
+                <p class="meta">Create one to get discovery started.</p>
               </div>
-            </div>
-            <p class="desc">{{ sidequest.description }}</p>
-            <div class="card-foot">
-              <span class="tag">{{ sidequest.category || 'General' }}</span>
-              <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
-                {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
-              </span>
-            </div>
+            </ng-template>
+            <a routerLink="/map" class="ghost-btn">View</a>
           </article>
-        </section>
 
-        <section class="quest-panel-backdrop" *ngIf="showCreatePanel" (click)="closeCreateSidequestPanel()">
-          <article class="quest-panel" (click)="$event.stopPropagation()">
-            <button type="button" class="panel-close" (click)="closeCreateSidequestPanel()">Close</button>
+          <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
+          <p class="meta" *ngIf="errorMessage">{{ errorMessage }}</p>
 
+          <section class="group-grid">
+            <article
+              class="group-card"
+              *ngFor="let sidequest of sidequests; index as i"
+              [style.--delay.ms]="i * 45"
+              role="button"
+              tabindex="0"
+              (click)="openSidequestDetails(sidequest)"
+              (keydown.enter)="openSidequestDetails(sidequest)"
+            >
+              <div class="card-top">
+                <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+                <div>
+                  <h3>{{ sidequest.title }}</h3>
+                  <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                </div>
+              </div>
+              <p class="desc">{{ sidequest.description }}</p>
+              <div class="card-foot">
+                <span class="tag">{{ sidequest.category || 'General' }}</span>
+                <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                  {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
+                </span>
+              </div>
+            </article>
+          </section>
+        </ng-container>
+
+        <ng-template #createTabContent>
+          <section class="create-tab-card">
             <p class="mono-title">Create sidequest</p>
             <h2>Create a new group</h2>
 
@@ -207,8 +210,8 @@ interface CreateSidequestForm {
               <button type="submit" class="join-btn" [disabled]="creatingSidequest">{{ creatingSidequest ? 'Creating...' : 'Create sidequest' }}</button>
               <p class="meta" *ngIf="createMessage">{{ createMessage }}</p>
             </form>
-          </article>
-        </section>
+          </section>
+        </ng-template>
 
         <section class="quest-panel-backdrop" *ngIf="selectedSidequest || detailsLoading" (click)="closeSidequestDetails()">
           <article class="quest-panel" (click)="$event.stopPropagation()">
@@ -644,6 +647,14 @@ interface CreateSidequestForm {
       font-size: 0.93rem;
     }
 
+    .create-tab-card {
+      border: 1px solid #c6d9e3;
+      border-radius: 16px;
+      background: #fafdff;
+      box-shadow: 0 12px 28px rgba(10, 32, 44, 0.1);
+      padding: 1rem 1rem 1.1rem;
+    }
+
     .simple-create-form {
       margin-top: 0.8rem;
       display: grid;
@@ -819,6 +830,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected featuredSidequest: DiscoverSidequestResponse | null = null;
   protected discoveredCategories: string[] = [];
   protected myQuestTitles: string[] = [];
+  protected activeMainTab: 'discover' | 'create' = 'discover';
   protected selectedCategory: string | null = null;
   protected searchTerm = '';
   protected displayName = 'Profile';
@@ -829,7 +841,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected detailsError = '';
   protected joiningSidequest = false;
   protected joinMessage = '';
-  protected showCreatePanel = false;
   protected creatingSidequest = false;
   protected createErrors: string[] = [];
   protected createMessage = '';
@@ -916,19 +927,13 @@ export class HomePageComponent implements OnInit, OnDestroy {
     });
   }
 
-  protected openCreateSidequestPanel(): void {
-    this.closeSidequestDetails();
-    this.showCreatePanel = true;
-    this.createErrors = [];
-    this.createMessage = '';
+  protected showDiscoverTab(): void {
+    this.activeMainTab = 'discover';
   }
 
-  protected closeCreateSidequestPanel(): void {
-    if (this.creatingSidequest) {
-      return;
-    }
-
-    this.showCreatePanel = false;
+  protected showCreateTab(): void {
+    this.activeMainTab = 'create';
+    this.closeSidequestDetails();
     this.createErrors = [];
     this.createMessage = '';
   }
@@ -982,7 +987,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (response) => {
           this.createMessage = 'Sidequest created.';
-          this.showCreatePanel = false;
+          this.activeMainTab = 'discover';
           this.resetCreateForm();
           this.selectedSidequest = response;
           this.detailsError = '';

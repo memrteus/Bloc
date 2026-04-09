@@ -11,7 +11,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       <nav class="nav-links">
         <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
         <a routerLink="/map" routerLinkActive="active">Map</a>
-        <a routerLink="/create-sidequest" routerLinkActive="active">Create Sidequest</a>
         <a routerLink="/login" routerLinkActive="active">Login</a>
         <a routerLink="/signup" routerLinkActive="active">Signup</a>
         <a routerLink="/profile" routerLinkActive="active">Profile</a>
