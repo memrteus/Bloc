@@ -31,6 +31,16 @@ export interface SignupResponse {
   profileCreated: boolean;
 }
 
+export interface CurrentUserResponse {
+  userId: string;
+  email: string;
+  username: string | null;
+  fullName: string | null;
+  umassEmail: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthApiService {
   private readonly http = inject(HttpClient);
@@ -45,11 +55,23 @@ export class AuthApiService {
         if (response.refreshToken) {
           localStorage.setItem('bloc.refreshToken', response.refreshToken);
         }
+
+        if (response.email) {
+          localStorage.setItem('bloc.userEmail', response.email);
+        }
+
+        if (response.userId) {
+          localStorage.setItem('bloc.userId', response.userId);
+        }
       })
     );
   }
 
   signup(payload: SignupRequest): Observable<SignupResponse> {
     return this.http.post<SignupResponse>('/auth/signup', payload);
+  }
+
+  getCurrentUser(): Observable<CurrentUserResponse> {
+    return this.http.get<CurrentUserResponse>('/auth/me');
   }
 }

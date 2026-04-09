@@ -4,11 +4,12 @@ import { provideRouter } from '@angular/router';
 
 import { AppComponent } from './app/app.component';
 import { apiPrefixInterceptor } from './app/core/interceptors/api-prefix.interceptor';
+import { authTokenInterceptor } from './app/core/interceptors/auth-token.interceptor';
 import { appRoutes } from './app/app.routes';
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideRouter(appRoutes),
-    provideHttpClient(withInterceptors([apiPrefixInterceptor]))
+    provideHttpClient(withInterceptors([authTokenInterceptor, apiPrefixInterceptor]))
   ]
 }).catch((error) => console.error(error));

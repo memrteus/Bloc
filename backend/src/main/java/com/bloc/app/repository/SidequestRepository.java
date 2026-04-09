@@ -79,7 +79,8 @@ public class SidequestRepository {
                         row.status(),
                         row.createdAt(),
                         row.updatedAt(),
-                        getParticipantUserIds(row.id())))
+                        getParticipantUserIds(row.id()),
+                        getParticipantDisplayNames(row.id())))
                 .toList();
     }
 
@@ -290,7 +291,8 @@ public class SidequestRepository {
                 row.status(),
                 row.createdAt(),
                 row.updatedAt(),
-                getParticipantUserIds(sidequestId));
+                getParticipantUserIds(sidequestId),
+                getParticipantDisplayNames(sidequestId));
     }
 
     private List<UUID> getParticipantUserIds(UUID sidequestId) {
@@ -303,6 +305,24 @@ public class SidequestRepository {
                 """,
                 Map.of("sidequestId", sidequestId),
                 (resultSet, rowNum) -> resultSet.getObject("user_id", UUID.class));
+    }
+
+    private List<String> getParticipantDisplayNames(UUID sidequestId) {
+        return jdbcTemplate.query(
+                """
+                select coalesce(
+                    nullif(trim(p.full_name), ''),
+                    nullif(trim(p.user_name), ''),
+                    nullif(trim(p.umass_email), ''),
+                    sp.user_id::text
+                ) as display_name
+                from sidequest_participants sp
+                left join profiles p on p.id = sp.user_id
+                where sp.sidequest_id = :sidequestId
+                order by sp.joined_at asc
+                """,
+                Map.of("sidequestId", sidequestId),
+                (resultSet, rowNum) -> resultSet.getString("display_name"));
     }
 
     private static Instant toInstant(ResultSet resultSet, String columnName) throws SQLException {

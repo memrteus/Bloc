@@ -20,5 +20,6 @@ public record Sidequest(
         String status,
         Instant createdAt,
         Instant updatedAt,
-        List<UUID> participantUserIds) {
+        List<UUID> participantUserIds,
+        List<String> participantDisplayNames) {
 }
