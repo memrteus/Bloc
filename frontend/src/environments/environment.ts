@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080/api',
-  supabaseUrl: 'https://YOUR_PROJECT_REF.supabase.co',
-  supabasePublishableKey: 'YOUR_SUPABASE_PUBLISHABLE_KEY'
+  supabaseUrl: 'db.juobtozbimgjeothtchz.supabase.co',
+  supabasePublishableKey: 'sb_publishable_WvXP1ATjETTEuX9nPY9Rtw_KUyKbtEF'
 };
