@@ -17,8 +17,6 @@ interface CreateSidequestForm {
   description: string;
   category: string;
   locationName: string;
-  latitude: number | null;
-  longitude: number | null;
   maxParticipants: number | null;
 }
 
@@ -185,20 +183,6 @@ interface CreateSidequestForm {
                 Max participants
                 <input name="maxParticipants" type="number" min="1" [(ngModel)]="createForm.maxParticipants" />
               </label>
-
-              <p class="meta">Coordinates are optional.</p>
-
-              <div class="coordinates-row">
-                <label>
-                  Latitude
-                  <input name="latitude" type="number" step="0.000001" [(ngModel)]="createForm.latitude" />
-                </label>
-
-                <label>
-                  Longitude
-                  <input name="longitude" type="number" step="0.000001" [(ngModel)]="createForm.longitude" />
-                </label>
-              </div>
 
               <div class="panel-errors" *ngIf="createErrors.length > 0">
                 <p class="participant-title">Please fix these fields:</p>
@@ -684,12 +668,6 @@ interface CreateSidequestForm {
       min-height: 92px;
     }
 
-    .coordinates-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.55rem;
-    }
-
     .panel-errors {
       border: 1px solid #f1c3c3;
       border-radius: 12px;
@@ -809,10 +787,6 @@ interface CreateSidequestForm {
         padding: 1rem;
       }
 
-      .coordinates-row {
-        grid-template-columns: 1fr;
-      }
-
       .banner {
         flex-direction: column;
         align-items: flex-start;
@@ -851,8 +825,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
     description: '',
     category: '',
     locationName: '',
-    latitude: null,
-    longitude: null,
     maxParticipants: 8
   };
 
@@ -1077,8 +1049,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
       description,
       category,
       locationName,
-      latitude: this.createForm.latitude,
-      longitude: this.createForm.longitude,
       maxParticipants: maxParticipants ?? null
     };
   }
@@ -1089,8 +1059,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
       description: '',
       category: '',
       locationName: '',
-      latitude: null,
-      longitude: null,
       maxParticipants: 8
     };
   }
