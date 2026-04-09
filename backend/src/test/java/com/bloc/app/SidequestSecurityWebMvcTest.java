@@ -67,6 +67,23 @@ class SidequestSecurityWebMvcTest {
     }
 
     @Test
+    void joinSidequestRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/join", "33333333-3333-3333-3333-333333333333"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void joinSidequestRejectsInvalidBearerToken() throws Exception {
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/join", "33333333-3333-3333-3333-333333333333")
+                        .header(AUTHORIZATION, "Bearer not-a-real-token"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
     void createSidequestUsesAuthenticatedUserContext() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         when(sidequestService.createSidequest(any(), any())).thenReturn(sampleResponse(creatorId, List.of(creatorId)));
@@ -186,6 +203,34 @@ class SidequestSecurityWebMvcTest {
         ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
         verify(sidequestService).joinSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
         org.junit.jupiter.api.Assertions.assertEquals(joinerId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void joinSidequestRejectsJoiningOwnSidequest() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.joinSidequest(any(), any()))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "You cannot join your own sidequest."));
+
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/join", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(creatorId.toString())
+                                .claim("email", "creator@bloc.test"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void joinSidequestRejectsDuplicateParticipant() throws Exception {
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.joinSidequest(any(), any()))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "You have already joined this sidequest."));
+
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/join", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isConflict());
     }
 
     private SidequestResponse sampleResponse(UUID creatorId, List<UUID> participantUserIds) {
