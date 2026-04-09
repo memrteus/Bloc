@@ -27,8 +27,8 @@ public class SidequestService {
         ensureProfileExists(user);
         validateCreateRequest(request);
 
-        Instant startsAt = request.startsAt() != null ? request.startsAt() : Instant.now();
-        Instant expiresAt = request.expiresAt() != null ? request.expiresAt() : startsAt.plusSeconds(24 * 60 * 60);
+        Instant startsAt = Instant.now();
+        Instant expiresAt = startsAt.plusSeconds(24 * 60 * 60);
         int maxParticipants = request.maxParticipants() != null ? request.maxParticipants() : 8;
 
         UUID sidequestId = sidequestRepository.insertSidequest(request, user.userId(), startsAt, expiresAt, maxParticipants);
@@ -62,10 +62,6 @@ public class SidequestService {
     }
 
     private void validateCreateRequest(CreateSidequestRequest request) {
-        if (request.expiresAt() != null && request.startsAt() != null && !request.expiresAt().isAfter(request.startsAt())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiresAt must be after startsAt.");
-        }
-
         if (request.maxParticipants() != null && request.maxParticipants() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants must be at least 1.");
         }

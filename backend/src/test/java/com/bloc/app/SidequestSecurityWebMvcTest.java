@@ -137,8 +137,6 @@ class SidequestSecurityWebMvcTest {
                   "locationName": "Main library",
                   "latitude": 42.3910,
                   "longitude": -72.5266,
-                  "startsAt": "2026-04-07T18:00:00Z",
-                  "expiresAt": "2026-04-08T18:00:00Z",
                   "maxParticipants": 8
                 }
                 """;
