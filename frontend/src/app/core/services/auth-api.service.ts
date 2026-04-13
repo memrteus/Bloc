@@ -45,6 +45,17 @@ export interface CurrentUserResponse {
 export class AuthApiService {
   private readonly http = inject(HttpClient);
 
+  logout(): Observable<void> {
+    return this.http.post<void>('/auth/logout', {});
+  }
+
+  clearSession(): void {
+    localStorage.removeItem('bloc.accessToken');
+    localStorage.removeItem('bloc.refreshToken');
+    localStorage.removeItem('bloc.userEmail');
+    localStorage.removeItem('bloc.userId');
+  }
+
   login(payload: LoginRequest): Observable<LoginResponse> {
     return this.http.post<LoginResponse>('/auth/login', payload).pipe(
       tap((response) => {
