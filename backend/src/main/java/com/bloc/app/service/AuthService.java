@@ -13,5 +13,7 @@ public interface AuthService {
 
     LoginResponse login(LoginRequest request);
 
+    void logout(String accessToken);
+
     CurrentUserResponse getCurrentUser(AuthenticatedUser authenticatedUser);
 }

@@ -8,6 +8,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
   const requestUrl = request.url.startsWith('/') ? request.url : `/${request.url}`;
   const requiresAuth =
     /^\/auth\/me(?:[/?#]|$)/.test(requestUrl) ||
+    /^\/auth\/logout(?:[/?#]|$)/.test(requestUrl) ||
     (/^\/sidequests(?:[/?#]|$)/.test(requestUrl) && request.method !== 'GET');
 
   if (!requiresAuth) {

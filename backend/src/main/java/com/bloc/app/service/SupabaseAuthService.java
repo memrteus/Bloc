@@ -163,6 +163,49 @@ public class SupabaseAuthService implements AuthService {
     }
 
     @Override
+    public void logout(String accessToken) {
+        if (!StringUtils.hasText(accessToken)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Access token is required.");
+        }
+
+        String logoutUrl = buildAuthUrl("/auth/v1/logout");
+        String publishableKey = requirePublishableKey();
+
+        try {
+            HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(logoutUrl))
+                    .header("apikey", publishableKey)
+                    .header("Authorization", "Bearer " + accessToken)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            String rawResponseBody = response.body();
+            JsonNode responseBody = parseJsonIfPossible(rawResponseBody);
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new ResponseStatusException(
+                        resolveErrorStatus(response.statusCode()),
+                        extractErrorMessage(responseBody, rawResponseBody));
+            }
+        } catch (IOException exception) {
+            logger.error("Failed to reach Supabase logout service at {}", logoutUrl, exception);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Failed to reach Supabase logout service.",
+                    exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            logger.error("Supabase logout request was interrupted for {}", logoutUrl, exception);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Supabase logout request was interrupted.",
+                    exception);
+        }
+    }
+
+    @Override
     public CurrentUserResponse getCurrentUser(AuthenticatedUser authenticatedUser) {
         return profileRepository.findCurrentUserProfile(authenticatedUser.userId())
                 .map(profile -> new CurrentUserResponse(

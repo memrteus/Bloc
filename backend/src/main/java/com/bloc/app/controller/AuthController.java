@@ -39,6 +39,12 @@ public class AuthController {
         return authService.login(request);
     }
 
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@AuthenticationPrincipal Jwt jwt) {
+        authService.logout(jwt.getTokenValue());
+    }
+
     @GetMapping("/me")
     public CurrentUserResponse me(@AuthenticationPrincipal Jwt jwt) {
         return authService.getCurrentUser(AuthenticatedUser.fromJwt(jwt));

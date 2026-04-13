@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { AuthApiService } from '../../core/services/auth-api.service';
@@ -55,6 +55,8 @@ interface CreateSidequestForm {
             <p class="status">Online now · Profile</p>
           </div>
         </div>
+
+        <button type="button" class="logout-btn" (click)="logout()">Log out</button>
       </aside>
 
       <main class="dashboard-main">
@@ -358,6 +360,24 @@ interface CreateSidequestForm {
       gap: 0.55rem;
       border-top: 1px solid rgba(183, 209, 220, 0.2);
       padding-top: 0.95rem;
+    }
+
+    .logout-btn {
+      border: 1px solid rgba(183, 209, 220, 0.35);
+      border-radius: 10px;
+      background: rgba(16, 37, 52, 0.72);
+      color: #d6e8f0;
+      padding: 0.5rem 0.7rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .logout-btn:hover {
+      background: rgba(132, 184, 204, 0.2);
+      color: #eff9fd;
     }
 
     .avatar {
@@ -797,6 +817,7 @@ interface CreateSidequestForm {
 export class HomePageComponent implements OnInit, OnDestroy {
   private readonly sidequestApi = inject(SidequestApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly router = inject(Router);
   private refreshTimer?: ReturnType<typeof setInterval>;
 
   private allSidequests: DiscoverSidequestResponse[] = [];
@@ -908,6 +929,21 @@ export class HomePageComponent implements OnInit, OnDestroy {
     this.closeSidequestDetails();
     this.createErrors = [];
     this.createMessage = '';
+  }
+
+  protected logout(): void {
+    this.authApi
+      .logout()
+      .pipe(
+        finalize(() => {
+          this.authApi.clearSession();
+          void this.router.navigateByUrl('/login');
+        })
+      )
+      .subscribe({
+        next: () => {},
+        error: () => {}
+      });
   }
 
   protected closeSidequestDetails(): void {

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,6 +47,28 @@ class AuthControllerWebMvcTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(authService);
+    }
+
+    @Test
+    void logoutRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(post("/api/auth/logout"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    void logoutForwardsAccessToken() throws Exception {
+        String tokenValue = "token-123";
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .with(jwt().jwt(jwt -> jwt
+                                .tokenValue(tokenValue)
+                                .subject("44444444-4444-4444-4444-444444444444")
+                                .claim("email", "student4@umass.edu"))))
+                .andExpect(status().isNoContent());
+
+        verify(authService).logout(tokenValue);
     }
 
     @Test
