@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, tap } from 'rxjs';
+import { Observable, Subject, of, tap } from 'rxjs';
 
 export interface DiscoverSidequestResponse {
   id: string;
@@ -60,6 +60,9 @@ export class SidequestApiService {
   private readonly http = inject(HttpClient);
   private readonly discoverCache = new Map<string, { expiresAt: number; data: DiscoverSidequestResponse[] }>();
   private readonly detailCache = new Map<string, { expiresAt: number; data: SidequestResponse }>();
+  private readonly sidequestUpdatedSubject = new Subject<void>();
+
+  readonly sidequestUpdated$ = this.sidequestUpdatedSubject.asObservable();
 
   private readonly discoverTtlMs = 20_000;
   private readonly detailTtlMs = 20_000;
@@ -125,6 +128,7 @@ export class SidequestApiService {
           expiresAt: Date.now() + this.detailTtlMs
         });
         this.discoverCache.clear();
+        this.sidequestUpdatedSubject.next();
       })
     );
   }
@@ -137,6 +141,7 @@ export class SidequestApiService {
           expiresAt: Date.now() + this.detailTtlMs
         });
         this.discoverCache.clear();
+        this.sidequestUpdatedSubject.next();
       })
     );
   }
