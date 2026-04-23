@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { Subscription, finalize } from 'rxjs';
 
 import { AuthApiService } from '../../core/services/auth-api.service';
 import {
@@ -818,7 +818,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   private readonly sidequestApi = inject(SidequestApiService);
   private readonly authApi = inject(AuthApiService);
   private readonly router = inject(Router);
-  private refreshTimer?: ReturnType<typeof setInterval>;
+  private sidequestUpdatesSubscription?: Subscription;
 
   private allSidequests: DiscoverSidequestResponse[] = [];
   protected sidequests: DiscoverSidequestResponse[] = [];
@@ -852,13 +852,13 @@ export class HomePageComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadCurrentUser();
     this.loadSidequests(true);
-    this.refreshTimer = setInterval(() => this.loadSidequests(false), 30000);
+    this.sidequestUpdatesSubscription = this.sidequestApi.sidequestUpdated$.subscribe(() => {
+      this.loadSidequests(false);
+    });
   }
 
   ngOnDestroy(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-    }
+    this.sidequestUpdatesSubscription?.unsubscribe();
 
   }
 
@@ -968,7 +968,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.selectedSidequest = response;
           this.joinMessage = 'You joined this quest.';
-          this.loadSidequests(false);
         },
         error: () => {
           this.joinMessage = 'Unable to join this quest right now.';
@@ -1001,7 +1000,6 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.detailsError = '';
           this.detailsLoading = false;
           this.joinMessage = '';
-          this.loadSidequests(false);
         },
         error: (error: unknown) => {
           const fallbackMessage = 'Unable to create sidequest right now.';
