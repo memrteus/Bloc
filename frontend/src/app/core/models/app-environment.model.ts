@@ -3,4 +3,5 @@ export interface AppEnvironment {
   apiBaseUrl: string;
   supabaseUrl: string;
   supabasePublishableKey: string;
+  mapboxAccessToken: string;
 }
