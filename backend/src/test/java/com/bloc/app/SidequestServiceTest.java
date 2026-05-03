@@ -39,33 +39,54 @@ class SidequestServiceTest {
     void discoverSidequestsTrimsFiltersAndMapsResponse() {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         Sidequest sidequest = sampleSidequest(creatorId);
-        when(sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc("library", "study", 20, 0))
+        when(sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc("library", "study", null, null, 25.0, 20, 0))
                 .thenReturn(List.of(sidequest));
 
-        List<DiscoverSidequestResponse> response = sidequestService.discoverSidequests("  library  ", "  study  ", 20, 0);
+        List<DiscoverSidequestResponse> response = sidequestService.discoverSidequests("  library  ", "  study  ", null, null, null, 20, 0);
 
         assertEquals(1, response.size());
         assertEquals("Library sprint", response.getFirst().title());
         assertEquals("study", response.getFirst().category());
-        verify(sidequestRepository).findDiscoverableSidequestsOrderByCreatedAtDesc("library", "study", 20, 0);
+        verify(sidequestRepository).findDiscoverableSidequestsOrderByCreatedAtDesc("library", "study", null, null, 25.0, 20, 0);
+    }
+
+    @Test
+    void discoverSidequestsPassesClampedRadiusFilters() {
+        when(sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, 42.3868, -72.5301, 100.0, 20, 0))
+                .thenReturn(List.of());
+
+        List<DiscoverSidequestResponse> response = sidequestService.discoverSidequests(null, null, 42.3868, -72.5301, 250.0, 20, 0);
+
+        assertEquals(0, response.size());
+        verify(sidequestRepository).findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, 42.3868, -72.5301, 100.0, 20, 0);
+    }
+
+    @Test
+    void discoverSidequestsRejectsPartialLocation() {
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> sidequestService.discoverSidequests(null, null, 42.3868, null, null, 20, 0));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("lat and lng must be provided together.", exception.getReason());
     }
 
     @Test
     void discoverSidequestsAllowsZeroLimit() {
-        when(sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, 0, 0))
+        when(sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, null, null, 25.0, 0, 0))
                 .thenReturn(List.of());
 
-        List<DiscoverSidequestResponse> response = sidequestService.discoverSidequests(null, null, 0, 0);
+        List<DiscoverSidequestResponse> response = sidequestService.discoverSidequests(null, null, null, null, null, 0, 0);
 
         assertEquals(0, response.size());
-        verify(sidequestRepository).findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, 0, 0);
+        verify(sidequestRepository).findDiscoverableSidequestsOrderByCreatedAtDesc(null, null, null, null, 25.0, 0, 0);
     }
 
     @Test
     void discoverSidequestsRejectsNegativeLimit() {
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> sidequestService.discoverSidequests(null, null, -1, 0));
+                () -> sidequestService.discoverSidequests(null, null, null, null, null, -1, 0));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertEquals("limit must be at least 0.", exception.getReason());
@@ -75,7 +96,7 @@ class SidequestServiceTest {
     void discoverSidequestsRejectsNegativeOffset() {
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> sidequestService.discoverSidequests(null, null, 20, -1));
+                () -> sidequestService.discoverSidequests(null, null, null, null, null, 20, -1));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertEquals("offset must be at least 0.", exception.getReason());
@@ -203,8 +224,10 @@ class SidequestServiceTest {
                 Instant.parse("2026-04-08T18:00:00Z"),
                 8,
                 "active",
+                null,
                 Instant.parse("2026-04-07T17:00:00Z"),
                 Instant.parse("2026-04-07T17:00:00Z"),
-                participantUserIds);
+                participantUserIds,
+                List.of("Creator"));
     }
 }

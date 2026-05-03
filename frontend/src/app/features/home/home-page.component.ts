@@ -2,28 +2,38 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, finalize, switchMap, tap } from 'rxjs';
 
 import { AuthApiService } from '../../core/services/auth-api.service';
+import { MapboxLocationSuggestion, MapboxSearchService } from '../../core/services/mapbox-search.service';
 import {
   CreateSidequestRequest,
   DiscoverSidequestResponse,
   SidequestApiService,
   SidequestResponse
 } from '../../core/services/sidequest-api.service';
+import {
+  MapUserLocation,
+  SelectedMapLocation,
+  SidequestMapItem,
+  SidequestMapComponent
+} from '../../shared/components/sidequest-map/sidequest-map.component';
 
 interface CreateSidequestForm {
   title: string;
   description: string;
   category: string;
   locationName: string;
+  locationLabel: string | null;
+  latitude: number | null;
+  longitude: number | null;
   maxParticipants: number | null;
 }
 
 @Component({
   selector: 'app-home-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SidequestMapComponent],
   template: `
     <section class="dashboard-wrap">
       <aside class="sidebar">
@@ -37,7 +47,7 @@ interface CreateSidequestForm {
 
         <nav class="menu">
           <button type="button" class="menu-item" [class.active]="activeMainTab === 'discover'" (click)="showDiscoverTab()">Browse groups</button>
-          <a class="menu-item" routerLink="/map">Map</a>
+          <button type="button" class="menu-item" [class.active]="mapDrawerOpen" (click)="openMapDrawer()">Map</button>
           <button type="button" class="menu-item" [class.active]="activeMainTab === 'create'" (click)="showCreateTab()">Create sidequest</button>
           <a class="menu-item" routerLink="/profile">Profile</a>
         </nav>
@@ -73,6 +83,7 @@ interface CreateSidequestForm {
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
+            <button type="button" class="ghost-btn" (click)="openMapDrawer()">Map</button>
             <button type="button" class="primary-btn" (click)="showCreateTab()">Create sidequest</button>
           </div>
           <div class="header-actions" *ngIf="activeMainTab === 'create'">
@@ -114,7 +125,7 @@ interface CreateSidequestForm {
                 <p class="meta">Create one to get discovery started.</p>
               </div>
             </ng-template>
-            <a routerLink="/map" class="ghost-btn">View</a>
+            <button type="button" class="ghost-btn" (click)="openMapDrawer()">View map</button>
           </article>
 
           <p class="meta" *ngIf="isLoading">Loading sidequests...</p>
@@ -178,8 +189,44 @@ interface CreateSidequestForm {
 
               <label>
                 Location
-                <input name="locationName" type="text" [(ngModel)]="createForm.locationName" required placeholder="Campus rec field" />
+                <div class="location-field">
+                  <input
+                    name="locationName"
+                    type="text"
+                    [(ngModel)]="createForm.locationName"
+                    (ngModelChange)="onLocationSearchChange($event)"
+                    required
+                    autocomplete="off"
+                    placeholder="Search for a place or address"
+                  />
+
+                  <div class="location-suggestions" *ngIf="locationSuggestions.length > 0">
+                    <button
+                      type="button"
+                      *ngFor="let suggestion of locationSuggestions"
+                      (click)="selectLocationSuggestion(suggestion)"
+                    >
+                      <span>{{ suggestion.name }}</span>
+                      <small *ngIf="suggestion.placeFormatted || suggestion.fullAddress">
+                        {{ suggestion.fullAddress || suggestion.placeFormatted }}
+                      </small>
+                    </button>
+                  </div>
+                </div>
+                <p class="field-note" *ngIf="locationSearching">Searching locations...</p>
+                <p class="field-note selected" *ngIf="hasSelectedLocation()">
+                  Selected: {{ createForm.locationLabel || createForm.locationName }}
+                </p>
               </label>
+
+              <section class="create-map-picker">
+                <p class="participant-title">Pick on map</p>
+                <app-sidequest-map
+                  [sidequests]="[]"
+                  [selectableLocationMode]="true"
+                  (locationSelected)="applyMapSelectedLocation($event)"
+                ></app-sidequest-map>
+              </section>
 
               <label>
                 Max participants
@@ -237,6 +284,44 @@ interface CreateSidequestForm {
             </ng-template>
           </article>
         </section>
+
+        <div class="map-drawer-backdrop" *ngIf="mapDrawerOpen" (click)="closeMapDrawer()"></div>
+        <aside class="map-drawer" *ngIf="mapDrawerOpen" aria-label="Sidequest map drawer">
+          <header class="map-drawer-header">
+            <div>
+              <p class="mono-title">Nearby map</p>
+              <h2>Sidequests near you</h2>
+            </div>
+            <button type="button" class="panel-close" (click)="closeMapDrawer()">Close</button>
+          </header>
+
+          <section class="radius-control">
+            <label for="map-radius">Showing sidequests within {{ mapRadiusMiles }} miles</label>
+            <input
+              id="map-radius"
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              [ngModel]="mapRadiusMiles"
+              [ngModelOptions]="{ standalone: true }"
+              (ngModelChange)="onMapRadiusChange($event)"
+            />
+            <p class="field-note" *ngIf="!mapUserLocation">Use your location to filter sidequests by radius.</p>
+            <p class="field-note" *ngIf="mapLoading">Loading nearby sidequests...</p>
+            <p class="field-note error" *ngIf="mapMessage">{{ mapMessage }}</p>
+          </section>
+
+          <app-sidequest-map
+            class="drawer-map"
+            [sidequests]="mapSidequests"
+            [requestLocationOnInit]="true"
+            [joinedSidequestIds]="joinedMapSidequestIds"
+            [joiningSidequestIds]="joiningMapSidequestIds"
+            (userLocationChange)="onMapUserLocation($event)"
+            (joinSidequest)="joinSidequestFromMap($event)"
+          ></app-sidequest-map>
+        </aside>
       </main>
     </section>
   `,
@@ -520,6 +605,7 @@ interface CreateSidequestForm {
       border: 1px solid #66aec5;
       background: #f1faff;
       white-space: nowrap;
+      cursor: pointer;
     }
 
     .group-grid {
@@ -620,6 +706,67 @@ interface CreateSidequestForm {
       padding: 1rem;
     }
 
+    .map-drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 45;
+      background: rgba(7, 19, 27, 0.22);
+    }
+
+    .map-drawer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 50;
+      width: min(520px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      border-left: 1px solid #c6d9e3;
+      background: #fafdff;
+      box-shadow: -20px 0 42px rgba(10, 32, 44, 0.22);
+      padding: 1rem;
+    }
+
+    .map-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .map-drawer-header h2 {
+      margin: 0.28rem 0 0;
+      color: #122433;
+      font-size: 1.18rem;
+    }
+
+    .radius-control {
+      display: grid;
+      gap: 0.38rem;
+      border: 1px solid #d3e4eb;
+      border-radius: 10px;
+      background: #f5fbfe;
+      padding: 0.7rem;
+    }
+
+    .radius-control label {
+      color: #14384a;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .radius-control input {
+      width: 100%;
+      accent-color: #0f766e;
+    }
+
+    .drawer-map {
+      min-height: 0;
+      flex: 1;
+    }
+
     .quest-panel {
       width: min(680px, 96vw);
       max-height: 88vh;
@@ -683,9 +830,86 @@ interface CreateSidequestForm {
       font: inherit;
     }
 
+    .location-field {
+      position: relative;
+    }
+
+    .location-field input {
+      width: 100%;
+    }
+
+    .location-suggestions {
+      position: absolute;
+      top: calc(100% + 0.35rem);
+      left: 0;
+      right: 0;
+      z-index: 35;
+      overflow: hidden;
+      border: 1px solid #c4d6df;
+      border-radius: 10px;
+      background: #ffffff;
+      box-shadow: 0 16px 34px rgba(10, 32, 44, 0.18);
+    }
+
+    .location-suggestions button {
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid #e2edf2;
+      background: #ffffff;
+      color: #14384a;
+      cursor: pointer;
+      display: grid;
+      gap: 0.16rem;
+      padding: 0.62rem 0.72rem;
+      text-align: left;
+    }
+
+    .location-suggestions button:last-child {
+      border-bottom: 0;
+    }
+
+    .location-suggestions button:hover {
+      background: #eef8fc;
+    }
+
+    .location-suggestions span {
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .location-suggestions small,
+    .field-note {
+      color: #5c7482;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .field-note {
+      margin: 0;
+    }
+
+    .field-note.selected {
+      color: #0f766e;
+      font-weight: 700;
+    }
+
+    .field-note.error {
+      color: #a33c3c;
+      font-weight: 700;
+    }
+
     .simple-create-form textarea {
       resize: vertical;
       min-height: 92px;
+    }
+
+    .create-map-picker {
+      display: grid;
+      gap: 0.45rem;
+      border: 1px solid #d3e4eb;
+      border-radius: 12px;
+      background: #f5fbfe;
+      padding: 0.7rem;
     }
 
     .panel-errors {
@@ -800,6 +1024,10 @@ interface CreateSidequestForm {
       .group-grid {
         grid-template-columns: 1fr;
       }
+
+      .map-drawer {
+        width: 100%;
+      }
     }
 
     @media (max-width: 640px) {
@@ -817,8 +1045,13 @@ interface CreateSidequestForm {
 export class HomePageComponent implements OnInit, OnDestroy {
   private readonly sidequestApi = inject(SidequestApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly mapboxSearch = inject(MapboxSearchService);
   private readonly router = inject(Router);
+  private readonly locationSearchInput = new Subject<string>();
+  private readonly mapRadiusInput = new Subject<number>();
   private refreshTimer?: ReturnType<typeof setInterval>;
+  private locationSearchSubscription?: Subscription;
+  private mapRadiusSubscription?: Subscription;
 
   private allSidequests: DiscoverSidequestResponse[] = [];
   protected sidequests: DiscoverSidequestResponse[] = [];
@@ -841,17 +1074,45 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected createMessage = '';
   protected isLoading = false;
   protected errorMessage = '';
+  protected mapDrawerOpen = false;
+  protected mapRadiusMiles = 25;
+  protected mapUserLocation: MapUserLocation | null = null;
+  protected mapSidequests: DiscoverSidequestResponse[] = [];
+  protected mapLoading = false;
+  protected mapMessage = '';
+  protected joinedMapSidequestIds: string[] = [];
+  protected joiningMapSidequestIds: string[] = [];
+  protected locationSuggestions: MapboxLocationSuggestion[] = [];
+  protected locationSearching = false;
   protected createForm: CreateSidequestForm = {
     title: '',
     description: '',
     category: '',
     locationName: '',
+    locationLabel: null,
+    latitude: null,
+    longitude: null,
     maxParticipants: 8
   };
 
   ngOnInit(): void {
     this.loadCurrentUser();
     this.loadSidequests(true);
+    this.locationSearchSubscription = this.locationSearchInput
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap(() => {
+          this.locationSearching = true;
+        }),
+        switchMap((query) => this.mapboxSearch.suggest(query).pipe(finalize(() => (this.locationSearching = false))))
+      )
+      .subscribe((suggestions) => {
+        this.locationSuggestions = suggestions;
+      });
+    this.mapRadiusSubscription = this.mapRadiusInput
+      .pipe(debounceTime(250), distinctUntilChanged())
+      .subscribe(() => this.loadNearbySidequests());
     this.refreshTimer = setInterval(() => this.loadSidequests(false), 30000);
   }
 
@@ -860,15 +1121,75 @@ export class HomePageComponent implements OnInit, OnDestroy {
       clearInterval(this.refreshTimer);
     }
 
+    this.locationSearchSubscription?.unsubscribe();
+    this.mapRadiusSubscription?.unsubscribe();
   }
 
   protected applyCategoryFilter(category: string | null): void {
     this.selectedCategory = category;
     this.applyClientFilters();
+    if (this.mapDrawerOpen && this.mapUserLocation) {
+      this.loadNearbySidequests();
+    }
   }
 
   protected onSearchChange(): void {
     this.applyClientFilters();
+    if (this.mapDrawerOpen && this.mapUserLocation) {
+      this.loadNearbySidequests();
+    }
+  }
+
+  protected onLocationSearchChange(value: string): void {
+    this.createForm.locationName = value;
+    this.createForm.locationLabel = null;
+    this.createForm.latitude = null;
+    this.createForm.longitude = null;
+
+    if (value.trim().length < 3) {
+      this.locationSuggestions = [];
+      this.locationSearching = false;
+      return;
+    }
+
+    this.locationSearchInput.next(value);
+  }
+
+  protected selectLocationSuggestion(suggestion: MapboxLocationSuggestion): void {
+    this.locationSuggestions = [];
+    this.locationSearching = true;
+
+    this.mapboxSearch
+      .retrieve(suggestion)
+      .pipe(finalize(() => (this.locationSearching = false)))
+      .subscribe((selectedLocation) => {
+        if (!selectedLocation) {
+          this.createErrors = ['Unable to read coordinates for that location. Try another result.'];
+          return;
+        }
+
+        this.createErrors = [];
+        this.createForm.locationName = selectedLocation.placeLabel
+          ? `${selectedLocation.locationName}, ${selectedLocation.placeLabel}`
+          : selectedLocation.locationName;
+        this.createForm.locationLabel = selectedLocation.placeLabel;
+        this.createForm.latitude = selectedLocation.latitude;
+        this.createForm.longitude = selectedLocation.longitude;
+      });
+  }
+
+  protected applyMapSelectedLocation(location: SelectedMapLocation): void {
+    this.createErrors = [];
+    this.createForm.locationName = location.locationName;
+    this.createForm.locationLabel = location.locationName;
+    this.createForm.latitude = location.latitude;
+    this.createForm.longitude = location.longitude;
+    this.locationSuggestions = [];
+    this.locationSearching = false;
+  }
+
+  protected hasSelectedLocation(): boolean {
+    return this.createForm.latitude !== null && this.createForm.longitude !== null;
   }
 
   protected getCategoryInitial(category: string | null | undefined): string {
@@ -922,13 +1243,68 @@ export class HomePageComponent implements OnInit, OnDestroy {
 
   protected showDiscoverTab(): void {
     this.activeMainTab = 'discover';
+    this.mapDrawerOpen = false;
   }
 
   protected showCreateTab(): void {
     this.activeMainTab = 'create';
+    this.mapDrawerOpen = false;
     this.closeSidequestDetails();
     this.createErrors = [];
     this.createMessage = '';
+  }
+
+  protected openMapDrawer(): void {
+    this.activeMainTab = 'discover';
+    this.closeSidequestDetails();
+    this.mapSidequests = this.sidequests;
+    this.mapMessage = '';
+    this.mapDrawerOpen = true;
+  }
+
+  protected closeMapDrawer(): void {
+    this.mapDrawerOpen = false;
+  }
+
+  protected onMapUserLocation(location: MapUserLocation): void {
+    this.mapUserLocation = location;
+    this.loadNearbySidequests();
+  }
+
+  protected onMapRadiusChange(radiusMiles: number | string): void {
+    this.mapRadiusMiles = Number(radiusMiles);
+    if (this.mapUserLocation) {
+      this.mapRadiusInput.next(this.mapRadiusMiles);
+    }
+  }
+
+  protected joinSidequestFromMap(sidequest: SidequestMapItem): void {
+    const sidequestId = sidequest.id?.toString();
+    if (!sidequestId || this.joiningMapSidequestIds.includes(sidequestId) || this.joinedMapSidequestIds.includes(sidequestId)) {
+      return;
+    }
+
+    this.mapMessage = '';
+    this.joiningMapSidequestIds = [...this.joiningMapSidequestIds, sidequestId];
+
+    this.sidequestApi
+      .join(sidequestId)
+      .pipe(
+        finalize(() => {
+          this.joiningMapSidequestIds = this.joiningMapSidequestIds.filter((id) => id !== sidequestId);
+        })
+      )
+      .subscribe({
+        next: () => {
+          this.joinedMapSidequestIds = [...new Set([...this.joinedMapSidequestIds, sidequestId])];
+          this.mapMessage = 'Joined sidequest.';
+          this.loadNearbySidequests();
+          this.loadSidequests(false);
+        },
+        error: (error: unknown) => {
+          this.mapMessage = this.extractErrorMessage(error) || 'Unable to join this sidequest from the map.';
+        }
+      });
   }
 
   protected logout(): void {
@@ -1002,6 +1378,9 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.detailsLoading = false;
           this.joinMessage = '';
           this.loadSidequests(false);
+          if (this.mapDrawerOpen && this.mapUserLocation) {
+            this.loadNearbySidequests();
+          }
         },
         error: (error: unknown) => {
           const fallbackMessage = 'Unable to create sidequest right now.';
@@ -1054,6 +1433,8 @@ export class HomePageComponent implements OnInit, OnDestroy {
     const description = this.createForm.description.trim();
     const category = this.createForm.category.trim();
     const locationName = this.createForm.locationName.trim();
+    const latitude = this.createForm.latitude;
+    const longitude = this.createForm.longitude;
     const maxParticipants = this.createForm.maxParticipants;
 
     if (!title) {
@@ -1072,6 +1453,10 @@ export class HomePageComponent implements OnInit, OnDestroy {
       this.createErrors.push('Location is required.');
     }
 
+    if (latitude === null || longitude === null) {
+      this.createErrors.push('Select a location from the suggestions so this sidequest can appear on the map.');
+    }
+
     if (maxParticipants !== null && maxParticipants !== undefined && maxParticipants < 1) {
       this.createErrors.push('Max participants must be at least 1.');
     }
@@ -1085,6 +1470,8 @@ export class HomePageComponent implements OnInit, OnDestroy {
       description,
       category,
       locationName,
+      latitude,
+      longitude,
       maxParticipants: maxParticipants ?? null
     };
   }
@@ -1095,8 +1482,13 @@ export class HomePageComponent implements OnInit, OnDestroy {
       description: '',
       category: '',
       locationName: '',
+      locationLabel: null,
+      latitude: null,
+      longitude: null,
       maxParticipants: 8
     };
+    this.locationSuggestions = [];
+    this.locationSearching = false;
   }
 
   private extractErrorMessage(error: unknown): string | null {
@@ -1152,6 +1544,37 @@ export class HomePageComponent implements OnInit, OnDestroy {
       });
   }
 
+  private loadNearbySidequests(): void {
+    if (!this.mapUserLocation) {
+      this.mapSidequests = this.sidequests;
+      return;
+    }
+
+    this.mapLoading = true;
+    this.mapMessage = '';
+
+    this.sidequestApi
+      .discover({
+        search: this.searchTerm,
+        category: this.selectedCategory ?? undefined,
+        lat: this.mapUserLocation.latitude,
+        lng: this.mapUserLocation.longitude,
+        radiusMiles: this.mapRadiusMiles,
+        limit: 120,
+        offset: 0
+      })
+      .pipe(finalize(() => (this.mapLoading = false)))
+      .subscribe({
+        next: (response) => {
+          this.mapSidequests = response;
+        },
+        error: (error: unknown) => {
+          this.mapMessage = this.extractErrorMessage(error) || 'Unable to load nearby sidequests right now.';
+          this.mapSidequests = [];
+        }
+      });
+  }
+
   private applyClientFilters(): void {
     const normalizedSearch = this.searchTerm.trim().toLowerCase();
     const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
@@ -1178,6 +1601,10 @@ export class HomePageComponent implements OnInit, OnDestroy {
 
     this.featuredSidequest = this.sidequests.length > 0 ? this.sidequests[0] : null;
     this.myQuestTitles = this.sidequests.slice(0, 3).map((sidequest) => sidequest.title);
+
+    if (!this.mapUserLocation) {
+      this.mapSidequests = this.sidequests;
+    }
   }
 
   private loadCurrentUser(): void {

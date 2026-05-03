@@ -19,6 +19,7 @@ public record DiscoverSidequestResponse(
         Integer maxParticipants,
         String status,
         UUID creatorId,
+        BigDecimal distanceMiles,
         Instant updatedAt,
         Instant createdAt) {
 
@@ -36,6 +37,7 @@ public record DiscoverSidequestResponse(
                 sidequest.maxParticipants(),
                 sidequest.status(),
                 sidequest.creatorId(),
+                sidequest.distanceMiles(),
                 sidequest.updatedAt(),
                 sidequest.createdAt());
     }

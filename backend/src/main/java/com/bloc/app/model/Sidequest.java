@@ -18,6 +18,7 @@ public record Sidequest(
         Instant expiresAt,
         Integer maxParticipants,
         String status,
+        BigDecimal distanceMiles,
         Instant createdAt,
         Instant updatedAt,
         List<UUID> participantUserIds,
