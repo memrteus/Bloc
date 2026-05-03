@@ -306,25 +306,7 @@ public class SidequestRepository {
 
     public Sidequest getRequiredSidequest(UUID sidequestId) {
         SidequestRow row = jdbcTemplate.queryForObject(
-                """
-                select
-                    id,
-                    creator_id,
-                    title,
-                    description,
-                    category,
-                    location_name,
-                    latitude,
-                    longitude,
-                    starts_at,
-                    expires_at,
-                    max_participants,
-                    status,
-                    created_at,
-                    updated_at
-                from sidequests
-                where id = :sidequestId
-                """,
+                buildRequiredSidequestQuery(),
                 Map.of("sidequestId", sidequestId),
                 SIDEQUEST_ROW_MAPPER);
 
@@ -346,6 +328,29 @@ public class SidequestRepository {
                 row.updatedAt(),
                 getParticipantUserIds(sidequestId),
                 getParticipantDisplayNames(sidequestId));
+    }
+
+    String buildRequiredSidequestQuery() {
+        return """
+                select
+                    id,
+                    creator_id,
+                    title,
+                    description,
+                    category,
+                    location_name,
+                    latitude,
+                    longitude,
+                    starts_at,
+                    expires_at,
+                    max_participants,
+                    status,
+                    null::numeric as distance_miles,
+                    created_at,
+                    updated_at
+                from sidequests
+                where id = :sidequestId
+                """;
     }
 
     private List<UUID> getParticipantUserIds(UUID sidequestId) {

@@ -75,4 +75,12 @@ class SidequestRepositoryTest {
         assertEquals(-72.5301, query.parameters().getValue("lng"));
         assertEquals(25.0, query.parameters().getValue("radiusMiles"));
     }
+
+    @Test
+    void buildRequiredSidequestQueryIncludesDistanceAliasForSharedMapper() {
+        String sql = sidequestRepository.buildRequiredSidequestQuery();
+
+        assertTrue(sql.contains("null::numeric as distance_miles"));
+        assertTrue(sql.contains("where id = :sidequestId"));
+    }
 }
