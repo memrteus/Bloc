@@ -34,6 +34,7 @@ public class SidequestRepository {
             toInstant(resultSet, "expires_at"),
             resultSet.getObject("max_participants", Integer.class),
             resultSet.getString("status"),
+            resultSet.getBigDecimal("distance_miles"),
             toInstant(resultSet, "created_at"),
             toInstant(resultSet, "updated_at"));
 
@@ -54,9 +55,12 @@ public class SidequestRepository {
     public List<Sidequest> findDiscoverableSidequestsOrderByCreatedAtDesc(
             String search,
             String category,
+            Double latitude,
+            Double longitude,
+            double radiusMiles,
             int limit,
             int offset) {
-        DiscoveryQuery discoveryQuery = buildDiscoverableSidequestsQuery(search, category, limit, offset);
+        DiscoveryQuery discoveryQuery = buildDiscoverableSidequestsQuery(search, category, latitude, longitude, radiusMiles, limit, offset);
 
         List<SidequestRow> rows = jdbcTemplate.query(
                 discoveryQuery.sql(),
@@ -77,6 +81,7 @@ public class SidequestRepository {
                         row.expiresAt(),
                         row.maxParticipants(),
                         row.status(),
+                        row.distanceMiles(),
                         row.createdAt(),
                         row.updatedAt(),
                         getParticipantUserIds(row.id()),
@@ -87,36 +92,73 @@ public class SidequestRepository {
     DiscoveryQuery buildDiscoverableSidequestsQuery(
             String search,
             String category,
+            Double latitude,
+            Double longitude,
+            double radiusMiles,
             int limit,
             int offset) {
         String searchPattern = search != null ? "%" + search.toLowerCase() + "%" : null;
         String normalizedCategory = category != null ? category.toLowerCase() : null;
+        boolean hasLocationFilter = latitude != null && longitude != null;
+        String distanceExpression = """
+                3958.8 * acos(least(1.0, greatest(-1.0,
+                    cos(radians(:lat)) *
+                    cos(radians(s.latitude::double precision)) *
+                    cos(radians(s.longitude::double precision) - radians(:lng)) +
+                    sin(radians(:lat)) *
+                    sin(radians(s.latitude::double precision))
+                )))
+                """;
         StringBuilder sql = new StringBuilder("""
                 select
-                    id,
-                    creator_id,
-                    title,
-                    description,
-                    category,
-                    location_name,
-                    latitude,
-                    longitude,
-                    starts_at,
-                    expires_at,
-                    max_participants,
-                    status,
-                    created_at,
-                    updated_at
-                from sidequests
-                where status = 'active'
-                  and (expires_at is null or expires_at > now())
+                    s.id,
+                    s.creator_id,
+                    s.title,
+                    s.description,
+                    s.category,
+                    s.location_name,
+                    s.latitude,
+                    s.longitude,
+                    s.starts_at,
+                    s.expires_at,
+                    s.max_participants,
+                    s.status,
+                """);
+
+        if (hasLocationFilter) {
+            sql.append(distanceExpression).append(" as distance_miles,\n");
+        } else {
+            sql.append("                    null::numeric as distance_miles,\n");
+        }
+
+        sql.append("""
+                    s.created_at,
+                    s.updated_at
+                from sidequests s
+                where s.status = 'active'
+                  and (s.expires_at is null or s.expires_at > now())
                 """);
 
         MapSqlParameterSource parameters = new MapSqlParameterSource();
 
+        if (hasLocationFilter) {
+            sql.append("""
+                      and s.latitude is not null
+                      and s.longitude is not null
+                      and (
+                    """);
+            sql.append(distanceExpression);
+            sql.append("""
+                      ) <= :radiusMiles
+                    """);
+            parameters.addValue("lat", latitude);
+            parameters.addValue("lng", longitude);
+            parameters.addValue("radiusMiles", radiusMiles);
+        }
+
         if (normalizedCategory != null) {
             sql.append("""
-                      and lower(category) = :category
+                      and lower(s.category) = :category
                     """);
             parameters.addValue("category", normalizedCategory);
         }
@@ -124,19 +166,27 @@ public class SidequestRepository {
         if (searchPattern != null) {
             sql.append("""
                       and (
-                        lower(title) like :searchPattern
-                        or lower(description) like :searchPattern
-                    or lower(location_name) like :searchPattern
+                        lower(s.title) like :searchPattern
+                        or lower(s.description) like :searchPattern
+                        or lower(s.location_name) like :searchPattern
                       )
                     """);
             parameters.addValue("searchPattern", searchPattern);
         }
 
-        sql.append("""
-                order by created_at desc
-                limit :limit
-                offset :offset
-                """);
+        if (hasLocationFilter) {
+            sql.append("""
+                    order by distance_miles asc, s.created_at desc
+                    limit :limit
+                    offset :offset
+                    """);
+        } else {
+            sql.append("""
+                    order by s.created_at desc
+                    limit :limit
+                    offset :offset
+                    """);
+        }
         parameters.addValue("limit", limit);
         parameters.addValue("offset", offset);
 
@@ -291,6 +341,7 @@ public class SidequestRepository {
                 row.expiresAt(),
                 row.maxParticipants(),
                 row.status(),
+                row.distanceMiles(),
                 row.createdAt(),
                 row.updatedAt(),
                 getParticipantUserIds(sidequestId),
@@ -345,6 +396,7 @@ public class SidequestRepository {
             Instant expiresAt,
             Integer maxParticipants,
             String status,
+            BigDecimal distanceMiles,
             Instant createdAt,
             Instant updatedAt) {
     }

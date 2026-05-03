@@ -15,6 +15,7 @@ export interface DiscoverSidequestResponse {
   maxParticipants: number | null;
   status: string;
   creatorId: string;
+  distanceMiles: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -22,6 +23,9 @@ export interface DiscoverSidequestResponse {
 export interface DiscoverSidequestQuery {
   search?: string;
   category?: string;
+  lat?: number;
+  lng?: number;
+  radiusMiles?: number;
   limit?: number;
   offset?: number;
 }
@@ -48,6 +52,7 @@ export interface SidequestResponse {
   expiresAt: string | null;
   maxParticipants: number | null;
   status: string;
+  distanceMiles: number | null;
   creatorId: string;
   participantUserIds: string[];
   participantDisplayNames: string[];
@@ -73,6 +78,15 @@ export class SidequestApiService {
 
     if (query.category && query.category.trim()) {
       params = params.set('category', query.category.trim());
+    }
+
+    if (query.lat !== undefined && query.lng !== undefined) {
+      params = params.set('lat', query.lat.toString());
+      params = params.set('lng', query.lng.toString());
+    }
+
+    if (query.radiusMiles !== undefined) {
+      params = params.set('radiusMiles', query.radiusMiles.toString());
     }
 
     if (query.limit !== undefined) {

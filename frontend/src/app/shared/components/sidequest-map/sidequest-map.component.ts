@@ -1,11 +1,14 @@
 import { CommonModule } from '@angular/common';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import {
   AfterViewInit,
   Component,
   ElementRef,
+  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
+  Output,
   SimpleChanges,
   ViewChild,
   inject
@@ -21,11 +24,25 @@ export interface SidequestMapItem {
   locationName?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  distanceMiles?: number | string | null;
 }
 
-interface UserLocation {
+export interface MapUserLocation {
   latitude: number;
   longitude: number;
+}
+
+export interface SelectedMapLocation {
+  latitude: number;
+  longitude: number;
+  locationName: string;
+}
+
+interface MapboxGeocodingResponse {
+  features?: Array<{
+    place_name?: string;
+    text?: string;
+  }>;
 }
 
 @Component({
@@ -123,6 +140,15 @@ interface UserLocation {
       box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.2), 0 8px 18px rgba(15, 23, 42, 0.28);
     }
 
+    :host ::ng-deep .selected-location-marker {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      background: #f97316;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.28);
+    }
+
     :host ::ng-deep .sidequest-popup {
       min-width: 210px;
       max-width: 260px;
@@ -170,6 +196,24 @@ interface UserLocation {
       font-weight: 700;
       text-decoration: none;
     }
+
+    :host ::ng-deep .sidequest-popup .join-map-btn {
+      width: 100%;
+      min-height: 34px;
+      margin-top: 0.45rem;
+      border: 0;
+      border-radius: 6px;
+      background: #123345;
+      color: #ffffff;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    :host ::ng-deep .sidequest-popup .join-map-btn[disabled] {
+      cursor: not-allowed;
+      opacity: 0.66;
+    }
   `]
 })
 export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestroy {
@@ -180,16 +224,25 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   @Input() initialZoom = 12;
   @Input() mapStyle = 'mapbox://styles/mapbox/streets-v12';
   @Input() requestLocationOnInit = false;
+  @Input() selectableLocationMode = false;
+  @Input() joinedSidequestIds: readonly (string | number)[] = [];
+  @Input() joiningSidequestIds: readonly (string | number)[] = [];
+
+  @Output() userLocationChange = new EventEmitter<MapUserLocation>();
+  @Output() joinSidequest = new EventEmitter<SidequestMapItem>();
+  @Output() locationSelected = new EventEmitter<SelectedMapLocation>();
 
   protected mapMessage = '';
   protected locating = false;
 
+  private readonly http = inject(HttpClient);
   private readonly config = inject(AppConfigService);
   private mapbox: typeof import('mapbox-gl')['default'] | null = null;
   private map: MapboxMap | null = null;
   private markers: MapboxMarker[] = [];
   private userLocationMarker: MapboxMarker | null = null;
-  private userLocation: UserLocation | null = null;
+  private selectedLocationMarker: MapboxMarker | null = null;
+  private userLocation: MapUserLocation | null = null;
   private mapLoaded = false;
   private destroyed = false;
   private initialLocationRequested = false;
@@ -199,7 +252,13 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['sidequests'] || changes['initialCenter'] || changes['initialZoom']) {
+    if (
+      changes['sidequests'] ||
+      changes['initialCenter'] ||
+      changes['initialZoom'] ||
+      changes['joinedSidequestIds'] ||
+      changes['joiningSidequestIds']
+    ) {
       this.syncMarkers();
     }
   }
@@ -207,6 +266,8 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   ngOnDestroy(): void {
     this.destroyed = true;
     this.clearMarkers();
+    this.userLocationMarker?.remove();
+    this.selectedLocationMarker?.remove();
     this.map?.remove();
   }
 
@@ -234,6 +295,14 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     });
 
     this.map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    this.map.on('click', (event) => {
+      if (!this.selectableLocationMode) {
+        return;
+      }
+
+      this.selectMapLocation(event.lngLat.lat, event.lngLat.lng);
+    });
+
     this.map.on('load', () => {
       this.mapLoaded = true;
       this.syncMarkers();
@@ -269,6 +338,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
           latitude: position.coords.latitude,
           longitude: position.coords.longitude
         };
+        this.userLocationChange.emit(this.userLocation);
         this.mapMessage = '';
         this.upsertUserLocationMarker();
         this.syncMarkers();
@@ -314,7 +384,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       );
 
     if (sidequestsWithCoordinates.length === 0) {
-      this.mapMessage = 'No sidequests with coordinates yet.';
+      this.mapMessage = this.selectableLocationMode ? 'Click the map to choose a location.' : 'No sidequests with coordinates yet.';
       this.map.setCenter(this.initialCenter);
       this.map.setZoom(this.initialZoom);
       return;
@@ -384,6 +454,69 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       .addTo(this.map);
   }
 
+  private selectMapLocation(latitude: number, longitude: number): void {
+    this.upsertSelectedLocationMarker(latitude, longitude);
+    this.locationSelected.emit({
+      latitude,
+      longitude,
+      locationName: 'Selected map location'
+    });
+    this.reverseGeocodeSelectedLocation(latitude, longitude);
+  }
+
+  private upsertSelectedLocationMarker(latitude: number, longitude: number): void {
+    if (!this.map || !this.mapbox) {
+      return;
+    }
+
+    if (this.selectedLocationMarker) {
+      this.selectedLocationMarker.setLngLat([longitude, latitude]);
+      return;
+    }
+
+    const markerElement = document.createElement('div');
+    markerElement.className = 'selected-location-marker';
+    markerElement.setAttribute('aria-label', 'Selected sidequest location');
+
+    this.selectedLocationMarker = new this.mapbox.Marker({ element: markerElement })
+      .setLngLat([longitude, latitude])
+      .addTo(this.map);
+  }
+
+  private reverseGeocodeSelectedLocation(latitude: number, longitude: number): void {
+    const accessToken = this.config.environment.mapboxAccessToken.trim();
+    if (!accessToken.startsWith('pk.')) {
+      return;
+    }
+
+    const params = new HttpParams()
+      .set('access_token', accessToken)
+      .set('limit', '1');
+
+    this.http
+      .get<MapboxGeocodingResponse>(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(`${longitude},${latitude}`)}.json`,
+        { params }
+      )
+      .subscribe({
+        next: (response) => {
+          const feature = response.features?.[0];
+          this.locationSelected.emit({
+            latitude,
+            longitude,
+            locationName: feature?.place_name || feature?.text || 'Selected map location'
+          });
+        },
+        error: () => {
+          this.locationSelected.emit({
+            latitude,
+            longitude,
+            locationName: 'Selected map location'
+          });
+        }
+      });
+  }
+
   private toCoordinate(value: number | string | null | undefined): number | null {
     if (value === null || value === undefined || value === '') {
       return null;
@@ -414,7 +547,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       wrapper.append(description);
     }
 
-    const distanceMiles = this.distanceFromUser(latitude, longitude);
+    const distanceMiles = this.toCoordinate(sidequest.distanceMiles) ?? this.distanceFromUser(latitude, longitude);
     if (distanceMiles !== null) {
       const distance = document.createElement('p');
       distance.className = 'distance';
@@ -429,6 +562,18 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       this.createDirectionsLink('Apple Maps', `https://maps.apple.com/?daddr=${latitude},${longitude}`)
     );
     wrapper.append(directions);
+
+    const joinButton = document.createElement('button');
+    joinButton.type = 'button';
+    joinButton.className = 'join-map-btn';
+    joinButton.textContent = this.joinButtonText(sidequest);
+    joinButton.disabled = this.isJoined(sidequest) || this.isJoining(sidequest);
+    joinButton.addEventListener('click', () => {
+      if (!joinButton.disabled) {
+        this.joinSidequest.emit(sidequest);
+      }
+    });
+    wrapper.append(joinButton);
 
     return wrapper;
   }
@@ -487,6 +632,26 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     }
 
     return `${Math.round(distanceMiles)} mi`;
+  }
+
+  private isJoined(sidequest: SidequestMapItem): boolean {
+    return sidequest.id !== null && sidequest.id !== undefined && this.joinedSidequestIds.includes(sidequest.id);
+  }
+
+  private isJoining(sidequest: SidequestMapItem): boolean {
+    return sidequest.id !== null && sidequest.id !== undefined && this.joiningSidequestIds.includes(sidequest.id);
+  }
+
+  private joinButtonText(sidequest: SidequestMapItem): string {
+    if (this.isJoined(sidequest)) {
+      return 'Joined';
+    }
+
+    if (this.isJoining(sidequest)) {
+      return 'Joining...';
+    }
+
+    return 'Join sidequest';
   }
 }
 

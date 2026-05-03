@@ -15,11 +15,11 @@ class SidequestRepositoryTest {
 
     @Test
     void buildDiscoverableSidequestsQueryIncludesBaseFilteringAndPagination() {
-        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, null, 20, 0);
+        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, null, null, null, 25.0, 20, 0);
 
-        assertTrue(query.sql().contains("where status = 'active'"));
-        assertTrue(query.sql().contains("(expires_at is null or expires_at > now())"));
-        assertTrue(query.sql().contains("order by created_at desc"));
+        assertTrue(query.sql().contains("where s.status = 'active'"));
+        assertTrue(query.sql().contains("(s.expires_at is null or s.expires_at > now())"));
+        assertTrue(query.sql().contains("order by s.created_at desc"));
         assertTrue(query.sql().contains("limit :limit"));
         assertTrue(query.sql().contains("offset :offset"));
         assertEquals(20, query.parameters().getValue("limit"));
@@ -28,30 +28,51 @@ class SidequestRepositoryTest {
 
     @Test
     void buildDiscoverableSidequestsQueryAddsSearchWhenProvided() {
-        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery("library", null, 20, 0);
+        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery("library", null, null, null, 25.0, 20, 0);
 
-        assertTrue(query.sql().contains("lower(title) like :searchPattern"));
-        assertTrue(query.sql().contains("lower(description) like :searchPattern"));
-        assertTrue(query.sql().contains("lower(location_name) like :searchPattern"));
+        assertTrue(query.sql().contains("lower(s.title) like :searchPattern"));
+        assertTrue(query.sql().contains("lower(s.description) like :searchPattern"));
+        assertTrue(query.sql().contains("lower(s.location_name) like :searchPattern"));
         assertEquals("%library%", query.parameters().getValue("searchPattern"));
     }
 
     @Test
     void buildDiscoverableSidequestsQueryAddsCategoryWhenProvided() {
-        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, "study", 20, 0);
+        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, "study", null, null, 25.0, 20, 0);
 
-        assertTrue(query.sql().contains("and lower(category) = :category"));
+        assertTrue(query.sql().contains("and lower(s.category) = :category"));
         assertEquals("study", query.parameters().getValue("category"));
     }
 
     @Test
     void buildDiscoverableSidequestsQuerySkipsOptionalFiltersWhenMissing() {
-        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, null, 20, 0);
+        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, null, null, null, 25.0, 20, 0);
         MapSqlParameterSource parameters = query.parameters();
 
-        assertFalse(query.sql().contains("lower(category) = :category"));
-        assertFalse(query.sql().contains("lower(title) like :searchPattern"));
+        assertFalse(query.sql().contains("lower(s.category) = :category"));
+        assertFalse(query.sql().contains("lower(s.title) like :searchPattern"));
         assertFalse(parameters.hasValue("category"));
         assertFalse(parameters.hasValue("searchPattern"));
+    }
+
+    @Test
+    void buildDiscoverableSidequestsQueryAddsRadiusFilterAndDistanceSortWhenLocationProvided() {
+        SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(
+                null,
+                null,
+                42.3868,
+                -72.5301,
+                25.0,
+                20,
+                0);
+
+        assertTrue(query.sql().contains("as distance_miles"));
+        assertTrue(query.sql().contains("s.latitude is not null"));
+        assertTrue(query.sql().contains("s.longitude is not null"));
+        assertTrue(query.sql().contains("<= :radiusMiles"));
+        assertTrue(query.sql().contains("order by distance_miles asc"));
+        assertEquals(42.3868, query.parameters().getValue("lat"));
+        assertEquals(-72.5301, query.parameters().getValue("lng"));
+        assertEquals(25.0, query.parameters().getValue("radiusMiles"));
     }
 }

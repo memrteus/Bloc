@@ -19,6 +19,10 @@ import com.bloc.app.security.AuthenticatedUser;
 @Service
 public class SidequestService {
 
+    private static final double DEFAULT_RADIUS_MILES = 25.0;
+    private static final double MIN_RADIUS_MILES = 1.0;
+    private static final double MAX_RADIUS_MILES = 100.0;
+
     private final SidequestRepository sidequestRepository;
 
     public SidequestService(SidequestRepository sidequestRepository) {
@@ -26,14 +30,26 @@ public class SidequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<DiscoverSidequestResponse> discoverSidequests(String search, String category, int limit, int offset) {
+    public List<DiscoverSidequestResponse> discoverSidequests(
+            String search,
+            String category,
+            Double latitude,
+            Double longitude,
+            Double radiusMiles,
+            int limit,
+            int offset) {
         String normalizedSearch = search != null && !search.isBlank() ? search.trim() : null;
         String normalizedCategory = category != null && !category.isBlank() ? category.trim() : null;
         validateDiscoveryPagination(limit, offset);
+        validateLocationQuery(latitude, longitude);
+        double clampedRadiusMiles = clampRadiusMiles(radiusMiles);
 
         return sidequestRepository.findDiscoverableSidequestsOrderByCreatedAtDesc(
                         normalizedSearch,
                         normalizedCategory,
+                        latitude,
+                        longitude,
+                        clampedRadiusMiles,
                         limit,
                         offset)
                 .stream()
@@ -117,6 +133,32 @@ public class SidequestService {
         if (offset < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "offset must be at least 0.");
         }
+    }
+
+    private void validateLocationQuery(Double latitude, Double longitude) {
+        if ((latitude == null) != (longitude == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lat and lng must be provided together.");
+        }
+
+        if (latitude != null && (latitude < -90 || latitude > 90)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lat must be between -90 and 90.");
+        }
+
+        if (longitude != null && (longitude < -180 || longitude > 180)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lng must be between -180 and 180.");
+        }
+    }
+
+    private double clampRadiusMiles(Double radiusMiles) {
+        if (radiusMiles == null) {
+            return DEFAULT_RADIUS_MILES;
+        }
+
+        if (Double.isNaN(radiusMiles) || Double.isInfinite(radiusMiles)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "radiusMiles must be a valid number.");
+        }
+
+        return Math.max(MIN_RADIUS_MILES, Math.min(MAX_RADIUS_MILES, radiusMiles));
     }
 
     private UUID parseUuid(String rawValue, String fieldName) {
