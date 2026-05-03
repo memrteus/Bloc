@@ -1,6 +1,7 @@
 package com.bloc.app.service;
 
 import com.bloc.app.dto.CurrentUserResponse;
+import com.bloc.app.dto.CurrentUserUpdateRequest;
 import com.bloc.app.dto.LoginRequest;
 import com.bloc.app.dto.LoginResponse;
 import com.bloc.app.dto.SignupRequest;
@@ -16,4 +17,6 @@ public interface AuthService {
     void logout(String accessToken);
 
     CurrentUserResponse getCurrentUser(AuthenticatedUser authenticatedUser);
+
+    CurrentUserResponse updateCurrentUser(AuthenticatedUser authenticatedUser, CurrentUserUpdateRequest request);
 }

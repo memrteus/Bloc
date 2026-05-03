@@ -44,8 +44,8 @@ public class ProfileRepository {
                 """,
                 new MapSqlParameterSource()
                         .addValue("id", profileId)
-                        .addValue("username", username)
-                        .addValue("fullName", fullName)
+                        .addValue("username", username != null ? username : "")
+                        .addValue("fullName", fullName != null ? fullName : "")
                         .addValue("email", email));
 
         return rowsInserted > 0;
@@ -86,6 +86,33 @@ public class ProfileRepository {
                 PROFILE_SUMMARY_ROW_MAPPER)
                 .stream()
                 .findFirst();
+    }
+
+    public int upsertProfile(UUID profileId, String avatarUrl, String bio) {
+        return jdbcTemplate.update(
+                """
+                insert into profiles (
+                    id,
+                    avatar_url,
+                    bio,
+                    created_at,
+                    updated_at
+                ) values (
+                    :id,
+                    :avatarUrl,
+                    :bio,
+                    now(),
+                    now()
+                )
+                on conflict (id) do update set
+                    avatar_url = :avatarUrl,
+                    bio = :bio,
+                    updated_at = now()
+                """,
+                new MapSqlParameterSource()
+                        .addValue("id", profileId)
+                        .addValue("avatarUrl", avatarUrl)
+                        .addValue("bio", bio));
     }
 
     private static CurrentUserProfile mapCurrentUserProfile(ResultSet resultSet) throws SQLException {
