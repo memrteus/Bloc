@@ -41,6 +41,11 @@ export interface CurrentUserResponse {
   bio: string | null;
 }
 
+export interface CurrentUserUpdateRequest {
+  avatarUrl: string | null;
+  bio: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthApiService {
   private readonly http = inject(HttpClient);
@@ -84,5 +89,9 @@ export class AuthApiService {
 
   getCurrentUser(): Observable<CurrentUserResponse> {
     return this.http.get<CurrentUserResponse>('/auth/me');
+  }
+
+  updateCurrentUser(payload: CurrentUserUpdateRequest): Observable<CurrentUserResponse> {
+    return this.http.patch<CurrentUserResponse>('/auth/me', payload);
   }
 }

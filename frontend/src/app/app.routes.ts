@@ -16,6 +16,6 @@ export const appRoutes: Routes = [
   { path: 'map', component: MapPageComponent },
   { path: 'sidequests/:id', component: SidequestDetailPageComponent, canActivate: [authGuard] },
   { path: 'create-sidequest', redirectTo: 'home', pathMatch: 'full' },
-  { path: 'profile', component: ProfilePageComponent },
+  { path: 'profile', component: ProfilePageComponent, canActivate: [authGuard] },
   { path: '**', redirectTo: 'login' }
 ];
