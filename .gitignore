@@ -61,3 +61,6 @@ test-output/
 tmp/
 temp/
 *.tmp
+
+httpie.http
+package-lock.json

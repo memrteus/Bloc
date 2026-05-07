@@ -83,4 +83,15 @@ class SidequestRepositoryTest {
         assertTrue(sql.contains("null::numeric as distance_miles"));
         assertTrue(sql.contains("where id = :sidequestId"));
     }
+
+    @Test
+    void buildJoinedSidequestsQueryFiltersByParticipantUserIdOnly() {
+        String sql = sidequestRepository.buildJoinedSidequestsQuery();
+
+        assertTrue(sql.contains("from sidequest_participants sp"));
+        assertTrue(sql.contains("join sidequests s on s.id = sp.sidequest_id"));
+        assertTrue(sql.contains("where sp.user_id = :userId"));
+        assertFalse(sql.contains("s.creator_id = :userId"));
+        assertTrue(sql.contains("order by sp.joined_at desc"));
+    }
 }
