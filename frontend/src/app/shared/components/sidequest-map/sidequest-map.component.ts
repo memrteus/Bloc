@@ -210,6 +210,19 @@ interface MapboxGeocodingResponse {
       font-weight: 700;
     }
 
+    :host ::ng-deep .sidequest-popup .detail-map-btn {
+      width: 100%;
+      min-height: 34px;
+      margin-top: 0.45rem;
+      border: 1px solid #66aec5;
+      border-radius: 6px;
+      background: #f1faff;
+      color: #0f5569;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
     :host ::ng-deep .sidequest-popup .join-map-btn[disabled] {
       cursor: not-allowed;
       opacity: 0.66;
@@ -230,6 +243,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
 
   @Output() userLocationChange = new EventEmitter<MapUserLocation>();
   @Output() joinSidequest = new EventEmitter<SidequestMapItem>();
+  @Output() openSidequest = new EventEmitter<SidequestMapItem>();
   @Output() locationSelected = new EventEmitter<SelectedMapLocation>();
 
   protected mapMessage = '';
@@ -562,6 +576,15 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       this.createDirectionsLink('Apple Maps', `https://maps.apple.com/?daddr=${latitude},${longitude}`)
     );
     wrapper.append(directions);
+
+    const detailButton = document.createElement('button');
+    detailButton.type = 'button';
+    detailButton.className = 'detail-map-btn';
+    detailButton.textContent = 'Open details';
+    detailButton.addEventListener('click', () => {
+      this.openSidequest.emit(sidequest);
+    });
+    wrapper.append(detailButton);
 
     const joinButton = document.createElement('button');
     joinButton.type = 'button';
