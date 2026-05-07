@@ -131,6 +131,10 @@ export class SidequestApiService {
     );
   }
 
+  getMyJoined(): Observable<DiscoverSidequestResponse[]> {
+    return this.http.get<DiscoverSidequestResponse[]>('/sidequests/my-joined');
+  }
+
   create(request: CreateSidequestRequest): Observable<SidequestResponse> {
     return this.http.post<SidequestResponse>('/sidequests', request).pipe(
       tap((data) => {

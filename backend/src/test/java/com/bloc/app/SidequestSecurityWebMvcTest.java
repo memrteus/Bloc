@@ -84,6 +84,23 @@ class SidequestSecurityWebMvcTest {
     }
 
     @Test
+    void myJoinedSidequestsRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(get("/api/sidequests/my-joined"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void myJoinedSidequestsRejectsInvalidBearerToken() throws Exception {
+        mockMvc.perform(get("/api/sidequests/my-joined")
+                        .header(AUTHORIZATION, "Bearer not-a-real-token"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
     void createSidequestUsesAuthenticatedUserContext() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         when(sidequestService.createSidequest(any(), any())).thenReturn(sampleResponse(creatorId, List.of(creatorId)));
@@ -219,6 +236,38 @@ class SidequestSecurityWebMvcTest {
         ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
         verify(sidequestService).joinSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
         org.junit.jupiter.api.Assertions.assertEquals(joinerId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void myJoinedSidequestsUsesAuthenticatedUserContext() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        when(sidequestService.getMyJoinedSidequests(any())).thenReturn(List.of(sampleDiscoverResponse(creatorId)));
+
+        mockMvc.perform(get("/api/sidequests/my-joined")
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Library sprint"))
+                .andExpect(jsonPath("$[0].participantUserIds").doesNotExist());
+
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).getMyJoinedSidequests(userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(joinerId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void myJoinedSidequestsReturnsEmptyList() throws Exception {
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        when(sidequestService.getMyJoinedSidequests(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/sidequests/my-joined")
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
     }
 
     @Test
