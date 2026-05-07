@@ -47,7 +47,6 @@ interface CreateSidequestForm {
 
         <nav class="menu">
           <button type="button" class="menu-item" [class.active]="activeMainTab === 'discover'" (click)="showDiscoverTab()">Browse groups</button>
-          <button type="button" class="menu-item" [class.active]="activeMainTab === 'my'" (click)="showMySidequestsTab()">My Sidequests</button>
           <button type="button" class="menu-item" [class.active]="mapDrawerOpen" (click)="openMapDrawer()">Map</button>
           <button type="button" class="menu-item" [class.active]="activeMainTab === 'create'" (click)="showCreateTab()">Create sidequest</button>
           <a class="menu-item" routerLink="/profile">Profile</a>
@@ -57,15 +56,22 @@ interface CreateSidequestForm {
           <p class="mono-title">My Sidequests</p>
           <p *ngIf="myJoinedLoading">Loading...</p>
           <p class="sidebar-error" *ngIf="!myJoinedLoading && myJoinedError">{{ myJoinedError }}</p>
-          <p *ngFor="let questTitle of myQuestTitles">{{ questTitle }}</p>
-          <p *ngIf="!myJoinedLoading && !myJoinedError && myQuestTitles.length === 0">No quests yet</p>
+          <button
+            type="button"
+            class="sidebar-quest"
+            *ngFor="let sidequest of myJoinedPreview"
+            (click)="openSidequestDetails(sidequest)"
+          >
+            {{ sidequest.title }}
+          </button>
+          <p *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length === 0">No quests yet</p>
           <button
             type="button"
             class="sidebar-link"
-            *ngIf="!myJoinedLoading && myJoinedSidequests.length > 4"
+            *ngIf="!myJoinedLoading && myJoinedSidequests.length > 5"
             (click)="showMySidequestsTab()"
           >
-            View all {{ myJoinedSidequests.length }}
+            View all
           </button>
         </div>
 
@@ -176,11 +182,6 @@ interface CreateSidequestForm {
         <ng-template #createTabContent>
           <ng-container *ngIf="activeMainTab === 'my'; else createFormContent">
             <section class="my-sidequests-tab">
-              <div class="tab-heading">
-                <p class="mono-title">Joined sidequests</p>
-                <h2>My Sidequests</h2>
-              </div>
-
               <p class="meta" *ngIf="myJoinedLoading">Loading your sidequests...</p>
               <p class="meta error-text" *ngIf="!myJoinedLoading && myJoinedError">{{ myJoinedError }}</p>
               <p class="meta" *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length === 0">
@@ -497,6 +498,7 @@ interface CreateSidequestForm {
       color: #f1b7b7;
     }
 
+    .sidebar-quest,
     .sidebar-link {
       border: 0;
       background: transparent;
@@ -506,6 +508,23 @@ interface CreateSidequestForm {
       font-weight: 700;
       padding: 0;
       cursor: pointer;
+    }
+
+    .sidebar-quest {
+      width: 100%;
+      display: block;
+      margin: 0 0 0.5rem;
+      color: #c3dae4;
+      font-size: 0.84rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-quest:hover {
+      color: #eff9fd;
     }
 
     .mono-title {
@@ -890,12 +909,6 @@ interface CreateSidequestForm {
       gap: 0.85rem;
     }
 
-    .tab-heading h2 {
-      margin: 0.28rem 0 0;
-      color: #122433;
-      font-size: 1.18rem;
-    }
-
     .error-text {
       color: #a33c3c;
       font-weight: 700;
@@ -1167,7 +1180,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected featuredSidequest: DiscoverSidequestResponse | null = null;
   protected discoveredCategories: string[] = [];
   protected myJoinedSidequests: DiscoverSidequestResponse[] = [];
-  protected myQuestTitles: string[] = [];
+  protected myJoinedPreview: DiscoverSidequestResponse[] = [];
   protected activeMainTab: 'discover' | 'create' | 'my' = 'discover';
   protected selectedCategory: string | null = null;
   protected searchTerm = '';
@@ -1701,13 +1714,13 @@ export class HomePageComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (response) => {
           this.myJoinedSidequests = response;
-          this.myQuestTitles = response.slice(0, 4).map((sidequest) => sidequest.title);
+          this.myJoinedPreview = response.slice(0, 5);
           this.joinedMapSidequestIds = response.map((sidequest) => sidequest.id);
         },
         error: () => {
           this.myJoinedError = 'Unable to load your sidequests right now.';
           this.myJoinedSidequests = [];
-          this.myQuestTitles = [];
+          this.myJoinedPreview = [];
           this.joinedMapSidequestIds = [];
         }
       });
