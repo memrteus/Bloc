@@ -3,9 +3,11 @@ package com.bloc.app.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,6 +20,7 @@ import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
+import com.bloc.app.dto.UpdateSidequestRequest;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.SidequestService;
 
@@ -68,5 +71,36 @@ public class SidequestController {
             @PathVariable String sidequestId,
             @AuthenticationPrincipal Jwt jwt) {
         return sidequestService.joinSidequest(sidequestId, AuthenticatedUser.fromJwt(jwt));
+    }
+
+    @PatchMapping("/{sidequestId}")
+    public SidequestDetailResponse updateSidequest(
+            @PathVariable String sidequestId,
+            @RequestBody UpdateSidequestRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return sidequestService.updateSidequest(sidequestId, request, AuthenticatedUser.fromJwt(jwt));
+    }
+
+    @DeleteMapping("/{sidequestId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteSidequest(
+            @PathVariable String sidequestId,
+            @AuthenticationPrincipal Jwt jwt) {
+        sidequestService.deleteSidequest(sidequestId, AuthenticatedUser.fromJwt(jwt));
+    }
+
+    @PostMapping("/{sidequestId}/complete")
+    public SidequestDetailResponse completeSidequest(
+            @PathVariable String sidequestId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return sidequestService.completeSidequest(sidequestId, AuthenticatedUser.fromJwt(jwt));
+    }
+
+    @DeleteMapping("/{sidequestId}/participants/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leaveSidequest(
+            @PathVariable String sidequestId,
+            @AuthenticationPrincipal Jwt jwt) {
+        sidequestService.leaveSidequest(sidequestId, AuthenticatedUser.fromJwt(jwt));
     }
 }

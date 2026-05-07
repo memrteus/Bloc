@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.bloc.app.dto.CreateSidequestRequest;
+import com.bloc.app.dto.UpdateSidequestRequest;
 import com.bloc.app.model.Sidequest;
 
 @Repository
@@ -150,6 +151,7 @@ public class SidequestRepository {
                 from sidequest_participants sp
                 join sidequests s on s.id = sp.sidequest_id
                 where sp.user_id = :userId
+                  and lower(s.status) <> 'deleted'
                 order by sp.joined_at desc, s.created_at desc
                 """;
     }
@@ -200,7 +202,7 @@ public class SidequestRepository {
                     s.created_at,
                     s.updated_at
                 from sidequests s
-                where s.status = 'active'
+                where lower(s.status) = 'active'
                   and (s.expires_at is null or s.expires_at > now())
                 """);
 
@@ -344,6 +346,80 @@ public class SidequestRepository {
                         .addValue("role", role));
 
         return rowsInserted > 0;
+    }
+
+    public void updateSidequest(UUID sidequestId, UpdateSidequestRequest request) {
+        jdbcTemplate.update(
+                """
+                update sidequests
+                set
+                    title = coalesce(:title, title),
+                    description = coalesce(:description, description),
+                    location_name = coalesce(:locationName, location_name),
+                    latitude = coalesce(:latitude, latitude),
+                    longitude = coalesce(:longitude, longitude),
+                    max_participants = coalesce(:maxParticipants, max_participants),
+                    expires_at = coalesce(:expiresAt, expires_at),
+                    updated_at = now()
+                where id = :sidequestId
+                """,
+                new MapSqlParameterSource()
+                        .addValue("sidequestId", sidequestId)
+                        .addValue("title", request.title())
+                        .addValue("description", request.description())
+                        .addValue("locationName", request.locationName())
+                        .addValue("latitude", request.latitude())
+                        .addValue("longitude", request.longitude())
+                        .addValue("maxParticipants", request.maxParticipants())
+                        .addValue("expiresAt", request.expiresAt() != null
+                                ? OffsetDateTime.ofInstant(request.expiresAt(), ZoneOffset.UTC)
+                                : null));
+    }
+
+    public void updateSidequestStatus(UUID sidequestId, String status) {
+        jdbcTemplate.update(
+                """
+                update sidequests
+                set status = :status,
+                    updated_at = now()
+                where id = :sidequestId
+                """,
+                new MapSqlParameterSource()
+                        .addValue("sidequestId", sidequestId)
+                        .addValue("status", status));
+    }
+
+    public void deleteSidequest(UUID sidequestId) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("sidequestId", sidequestId);
+
+        jdbcTemplate.update(
+                """
+                delete from sidequest_participants
+                where sidequest_id = :sidequestId
+                """,
+                parameters);
+
+        jdbcTemplate.update(
+                """
+                delete from sidequests
+                where id = :sidequestId
+                """,
+                parameters);
+    }
+
+    public boolean removeParticipant(UUID sidequestId, UUID userId) {
+        int rowsDeleted = jdbcTemplate.update(
+                """
+                delete from sidequest_participants
+                where sidequest_id = :sidequestId
+                  and user_id = :userId
+                """,
+                new MapSqlParameterSource()
+                        .addValue("sidequestId", sidequestId)
+                        .addValue("userId", userId));
+
+        return rowsDeleted > 0;
     }
 
     public boolean sidequestExists(UUID sidequestId) {

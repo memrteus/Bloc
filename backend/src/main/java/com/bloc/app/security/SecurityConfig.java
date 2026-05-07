@@ -41,6 +41,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/sidequests/my-joined").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/sidequests/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/sidequests", "/api/sidequests/**").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/sidequests/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/sidequests/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 

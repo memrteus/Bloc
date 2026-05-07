@@ -41,6 +41,16 @@ export interface CreateSidequestRequest {
   maxParticipants?: number | null;
 }
 
+export interface UpdateSidequestRequest {
+  title?: string | null;
+  description?: string | null;
+  locationName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  maxParticipants?: number | null;
+  expiresAt?: string | null;
+}
+
 export interface SidequestResponse {
   id: string;
   title: string;
@@ -179,6 +189,48 @@ export class SidequestApiService {
 
   join(sidequestId: string): Observable<SidequestResponse> {
     return this.http.post<SidequestResponse>(`/sidequests/${sidequestId}/join`, {}).pipe(
+      tap(() => {
+        this.discoverCache.clear();
+        this.detailCache.delete(sidequestId);
+      })
+    );
+  }
+
+  update(sidequestId: string, request: UpdateSidequestRequest): Observable<SidequestDetailResponse> {
+    return this.http.patch<SidequestDetailResponse>(`/sidequests/${sidequestId}`, request).pipe(
+      tap((data) => {
+        this.discoverCache.clear();
+        this.detailCache.set(sidequestId, {
+          data,
+          expiresAt: Date.now() + this.detailTtlMs
+        });
+      })
+    );
+  }
+
+  delete(sidequestId: string): Observable<void> {
+    return this.http.delete<void>(`/sidequests/${sidequestId}`).pipe(
+      tap(() => {
+        this.discoverCache.clear();
+        this.detailCache.delete(sidequestId);
+      })
+    );
+  }
+
+  complete(sidequestId: string): Observable<SidequestDetailResponse> {
+    return this.http.post<SidequestDetailResponse>(`/sidequests/${sidequestId}/complete`, {}).pipe(
+      tap((data) => {
+        this.discoverCache.clear();
+        this.detailCache.set(sidequestId, {
+          data,
+          expiresAt: Date.now() + this.detailTtlMs
+        });
+      })
+    );
+  }
+
+  leave(sidequestId: string): Observable<void> {
+    return this.http.delete<void>(`/sidequests/${sidequestId}/participants/me`).pipe(
       tap(() => {
         this.discoverCache.clear();
         this.detailCache.delete(sidequestId);

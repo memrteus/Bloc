@@ -13,6 +13,7 @@ import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
+import com.bloc.app.dto.UpdateSidequestRequest;
 import com.bloc.app.model.Sidequest;
 import com.bloc.app.repository.SidequestRepository;
 import com.bloc.app.repository.SidequestRepository.SidequestParticipantSummary;
@@ -25,6 +26,9 @@ public class SidequestService {
     private static final double DEFAULT_RADIUS_MILES = 25.0;
     private static final double MIN_RADIUS_MILES = 1.0;
     private static final double MAX_RADIUS_MILES = 100.0;
+    private static final String STATUS_ACTIVE = "active";
+    private static final String STATUS_COMPLETED = "completed";
+    private static final String STATUS_DELETED = "deleted";
 
     private final SidequestRepository sidequestRepository;
 
@@ -67,11 +71,7 @@ public class SidequestService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sidequest not found.");
         }
 
-        Sidequest sidequest = sidequestRepository.getRequiredSidequest(parsedSidequestId);
-        SidequestUserSummary creator = sidequestRepository.findUserSummary(sidequest.creatorId())
-                .orElseGet(() -> new SidequestUserSummary(sidequest.creatorId(), sidequest.creatorId().toString(), null));
-        List<SidequestParticipantSummary> participants = sidequestRepository.findParticipantSummaries(parsedSidequestId);
-        return SidequestDetailResponse.fromModel(sidequest, creator, participants, user.userId(), resolveStatus(sidequest));
+        return buildDetailResponse(parsedSidequestId, user);
     }
 
     @Transactional(readOnly = true)
@@ -116,6 +116,61 @@ public class SidequestService {
         return SidequestResponse.fromModel(sidequestRepository.getRequiredSidequest(parsedSidequestId));
     }
 
+    @Transactional
+    public SidequestDetailResponse updateSidequest(String sidequestId, UpdateSidequestRequest request, AuthenticatedUser user) {
+        ensureProfileExists(user);
+
+        UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
+        Sidequest sidequest = getExistingSidequest(parsedSidequestId);
+        assertCreator(sidequest, user);
+        validateUpdateRequest(request, sidequest);
+
+        sidequestRepository.updateSidequest(parsedSidequestId, request);
+        return buildDetailResponse(parsedSidequestId, user);
+    }
+
+    @Transactional
+    public void deleteSidequest(String sidequestId, AuthenticatedUser user) {
+        ensureProfileExists(user);
+
+        UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
+        Sidequest sidequest = getExistingSidequest(parsedSidequestId);
+        assertCreator(sidequest, user);
+
+        sidequestRepository.deleteSidequest(parsedSidequestId);
+    }
+
+    @Transactional
+    public SidequestDetailResponse completeSidequest(String sidequestId, AuthenticatedUser user) {
+        ensureProfileExists(user);
+
+        UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
+        Sidequest sidequest = getExistingSidequest(parsedSidequestId);
+        assertCreator(sidequest, user);
+
+        sidequestRepository.updateSidequestStatus(parsedSidequestId, STATUS_COMPLETED);
+        return buildDetailResponse(parsedSidequestId, user);
+    }
+
+    @Transactional
+    public void leaveSidequest(String sidequestId, AuthenticatedUser user) {
+        ensureProfileExists(user);
+
+        UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
+        Sidequest sidequest = getExistingSidequest(parsedSidequestId);
+        if (sidequest.creatorId().equals(user.userId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Creator cannot leave their own sidequest.");
+        }
+
+        if (!sidequest.participantUserIds().contains(user.userId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "You have not joined this sidequest.");
+        }
+
+        if (!sidequestRepository.removeParticipant(parsedSidequestId, user.userId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "You have not joined this sidequest.");
+        }
+    }
+
     private void ensureProfileExists(AuthenticatedUser user) {
         if (!sidequestRepository.profileExists(user.userId())) {
             throw new ResponseStatusException(
@@ -130,7 +185,41 @@ public class SidequestService {
         }
     }
 
+    private void validateUpdateRequest(UpdateSidequestRequest request, Sidequest sidequest) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request body is required.");
+        }
+
+        if (request.title() != null && request.title().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title cannot be blank.");
+        }
+
+        if (request.description() != null && request.description().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "description cannot be blank.");
+        }
+
+        if (request.locationName() != null && request.locationName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "locationName cannot be blank.");
+        }
+
+        if ((request.latitude() == null) != (request.longitude() == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude and longitude must be provided together.");
+        }
+
+        if (request.maxParticipants() != null && request.maxParticipants() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants must be at least 1.");
+        }
+
+        if (request.maxParticipants() != null && request.maxParticipants() < sidequest.participantUserIds().size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxParticipants cannot be less than current participant count.");
+        }
+    }
+
     private void validateJoinRequest(Sidequest sidequest, AuthenticatedUser user) {
+        if (!STATUS_ACTIVE.equals(resolveStatus(sidequest))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This sidequest is not active.");
+        }
+
         if (sidequest.creatorId().equals(user.userId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot join your own sidequest.");
         }
@@ -181,17 +270,43 @@ public class SidequestService {
         return Math.max(MIN_RADIUS_MILES, Math.min(MAX_RADIUS_MILES, radiusMiles));
     }
 
+    private Sidequest getExistingSidequest(UUID sidequestId) {
+        if (!sidequestRepository.sidequestExists(sidequestId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sidequest not found.");
+        }
+
+        return sidequestRepository.getRequiredSidequest(sidequestId);
+    }
+
+    private SidequestDetailResponse buildDetailResponse(UUID sidequestId, AuthenticatedUser user) {
+        Sidequest sidequest = sidequestRepository.getRequiredSidequest(sidequestId);
+        SidequestUserSummary creator = sidequestRepository.findUserSummary(sidequest.creatorId())
+                .orElseGet(() -> new SidequestUserSummary(sidequest.creatorId(), sidequest.creatorId().toString(), null));
+        List<SidequestParticipantSummary> participants = sidequestRepository.findParticipantSummaries(sidequestId);
+        return SidequestDetailResponse.fromModel(sidequest, creator, participants, user.userId(), resolveStatus(sidequest));
+    }
+
+    private void assertCreator(Sidequest sidequest, AuthenticatedUser user) {
+        if (!sidequest.creatorId().equals(user.userId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the sidequest creator can perform this action.");
+        }
+    }
+
     private String resolveStatus(Sidequest sidequest) {
         String status = sidequest.status() != null ? sidequest.status().trim().toLowerCase() : "active";
-        if ("completed".equals(status)) {
-            return "completed";
+        if (STATUS_COMPLETED.equals(status)) {
+            return STATUS_COMPLETED;
+        }
+
+        if (STATUS_DELETED.equals(status)) {
+            return STATUS_DELETED;
         }
 
         if (sidequest.expiresAt() != null && sidequest.expiresAt().isBefore(Instant.now())) {
             return "expired";
         }
 
-        return status.isBlank() ? "active" : status;
+        return status.isBlank() ? STATUS_ACTIVE : status;
     }
 
     private UUID parseUuid(String rawValue, String fieldName) {
