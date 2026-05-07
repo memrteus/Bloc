@@ -13,6 +13,7 @@ export interface DiscoverSidequestResponse {
   startsAt: string | null;
   expiresAt: string | null;
   maxParticipants: number | null;
+  participantCount: number;
   status: string;
   creatorId: string;
   distanceMiles: number | null;

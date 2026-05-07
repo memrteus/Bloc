@@ -193,12 +193,12 @@ interface CreateSidequestForm {
                 [class.compact]="myJoinedSidequests.length > 4"
                 *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length > 0"
               >
-                <section class="my-sidequest-section" *ngIf="myCreatedSidequests.length > 0">
-                  <p class="participant-title">Created by you</p>
+                <section class="my-sidequest-section" *ngIf="myParticipantSidequests.length > 0">
+                  <p class="participant-title">Joined</p>
                   <section class="group-grid my-sidequest-grid">
                     <article
                       class="group-card"
-                      *ngFor="let sidequest of myCreatedSidequests; index as i"
+                      *ngFor="let sidequest of myParticipantSidequests; index as i"
                       [style.--delay.ms]="i * 45"
                       role="button"
                       tabindex="0"
@@ -223,13 +223,13 @@ interface CreateSidequestForm {
                   </section>
                 </section>
 
-                <section class="my-sidequest-section" *ngIf="myParticipantSidequests.length > 0">
-                  <p class="participant-title">Joined</p>
+                <section class="my-sidequest-section" *ngIf="myCreatedSidequests.length > 0">
+                  <p class="participant-title">Created by you</p>
                   <section class="group-grid my-sidequest-grid">
                     <article
                       class="group-card"
-                      *ngFor="let sidequest of myParticipantSidequests; index as i"
-                      [style.--delay.ms]="(myCreatedSidequests.length + i) * 45"
+                      *ngFor="let sidequest of myCreatedSidequests; index as i"
+                      [style.--delay.ms]="(myParticipantSidequests.length + i) * 45"
                       role="button"
                       tabindex="0"
                       (click)="openSidequestDetails(sidequest)"
@@ -416,6 +416,7 @@ interface CreateSidequestForm {
             [requestLocationOnInit]="true"
             [joinedSidequestIds]="joinedMapSidequestIds"
             [joiningSidequestIds]="joiningMapSidequestIds"
+            [currentUserId]="currentUserId"
             (userLocationChange)="onMapUserLocation($event)"
             (joinSidequest)="joinSidequestFromMap($event)"
             (openSidequest)="openSidequestDetails($event)"
@@ -1450,7 +1451,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected openMapDrawer(): void {
     this.activeMainTab = 'discover';
     this.closeSidequestDetails();
-    this.mapSidequests = this.sidequests;
+    this.mapSidequests = this.filterMapSidequests(this.allSidequests);
     this.mapMessage = '';
     this.mapDrawerOpen = true;
   }
@@ -1756,6 +1757,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.myJoinedPreview = response.slice(0, 5);
           this.updateMySidequestGroups();
           this.joinedMapSidequestIds = response.map((sidequest) => sidequest.id);
+          this.applyClientFilters();
         },
         error: () => {
           this.myJoinedError = 'Unable to load your sidequests right now.';
@@ -1763,13 +1765,14 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.myJoinedPreview = [];
           this.updateMySidequestGroups();
           this.joinedMapSidequestIds = [];
+          this.applyClientFilters();
         }
       });
   }
 
   private loadNearbySidequests(): void {
     if (!this.mapUserLocation) {
-      this.mapSidequests = this.sidequests;
+      this.mapSidequests = this.filterMapSidequests(this.allSidequests);
       return;
     }
 
@@ -1802,7 +1805,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
     const normalizedSearch = this.searchTerm.trim().toLowerCase();
     const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
 
-    this.sidequests = this.allSidequests.filter((sidequest) => {
+    this.sidequests = this.filterDiscoverableSidequests(this.allSidequests).filter((sidequest) => {
       const sidequestCategory = sidequest.category?.trim().toLowerCase() ?? '';
       const matchesCategory = !normalizedCategory || sidequestCategory === normalizedCategory;
 
@@ -1825,8 +1828,39 @@ export class HomePageComponent implements OnInit, OnDestroy {
     this.featuredSidequest = this.sidequests.length > 0 ? this.sidequests[0] : null;
 
     if (!this.mapUserLocation) {
-      this.mapSidequests = this.sidequests;
+      this.mapSidequests = this.filterMapSidequests(this.allSidequests);
     }
+  }
+
+  private filterMapSidequests(sidequests: DiscoverSidequestResponse[]): DiscoverSidequestResponse[] {
+    const normalizedSearch = this.searchTerm.trim().toLowerCase();
+    const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
+
+    return sidequests.filter((sidequest) => {
+      const sidequestCategory = sidequest.category?.trim().toLowerCase() ?? '';
+      const matchesCategory = !normalizedCategory || sidequestCategory === normalizedCategory;
+
+      if (!matchesCategory) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [sidequest.title, sidequest.description, sidequest.category, sidequest.locationName]
+        .filter((value): value is string => Boolean(value))
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }
+
+  private filterDiscoverableSidequests(sidequests: DiscoverSidequestResponse[]): DiscoverSidequestResponse[] {
+    const joinedSidequestIds = new Set(this.myJoinedSidequests.map((sidequest) => sidequest.id));
+
+    return sidequests.filter((sidequest) => sidequest.creatorId !== this.currentUserId && !joinedSidequestIds.has(sidequest.id));
   }
 
   private loadCurrentUser(): void {
@@ -1837,6 +1871,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
         this.userInitial = preferredName.charAt(0).toUpperCase();
         this.currentUserId = user.userId;
         this.updateMySidequestGroups();
+        this.applyClientFilters();
       },
       error: () => {
         const fallbackEmail = localStorage.getItem('bloc.userEmail') || 'Profile';
@@ -1844,6 +1879,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
         this.userInitial = this.displayName.charAt(0).toUpperCase();
         this.currentUserId = localStorage.getItem('bloc.userId');
         this.updateMySidequestGroups();
+        this.applyClientFilters();
       }
     });
   }

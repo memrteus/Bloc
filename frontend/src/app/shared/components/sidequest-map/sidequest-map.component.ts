@@ -25,6 +25,10 @@ export interface SidequestMapItem {
   latitude?: number | string | null;
   longitude?: number | string | null;
   distanceMiles?: number | string | null;
+  maxParticipants?: number | string | null;
+  participantCount?: number | string | null;
+  status?: string | null;
+  creatorId?: string | number | null;
 }
 
 export interface MapUserLocation {
@@ -54,6 +58,9 @@ interface MapboxGeocodingResponse {
       <button type="button" class="locate-btn" (click)="requestCurrentLocation()" [disabled]="locating">
         {{ locating ? 'Locating...' : 'Use my location' }}
       </button>
+      <button type="button" class="joined-toggle-btn" (click)="toggleJoinedVisibility()" *ngIf="hasJoinedSidequests()">
+        {{ hideJoinedSidequests ? 'Show joined' : 'Hide joined' }}
+      </button>
       <div #mapContainer class="map-canvas" aria-label="Sidequest map"></div>
       <p class="map-message" *ngIf="mapMessage">{{ mapMessage }}</p>
     </div>
@@ -79,6 +86,22 @@ interface MapboxGeocodingResponse {
       position: absolute;
       top: 0.75rem;
       left: 0.75rem;
+      z-index: 2;
+      border: 1px solid rgba(15, 85, 105, 0.22);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #0f5569;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 0.46rem 0.62rem;
+    }
+
+    .joined-toggle-btn {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
       z-index: 2;
       border: 1px solid rgba(15, 85, 105, 0.22);
       border-radius: 6px;
@@ -127,8 +150,15 @@ interface MapboxGeocodingResponse {
     }
 
     :host ::ng-deep .sidequest-marker.closest {
-      background: #db2777;
       transform: scale(1.18);
+    }
+
+    :host ::ng-deep .sidequest-marker.joined {
+      background: #2563eb;
+    }
+
+    :host ::ng-deep .sidequest-marker.unavailable {
+      background: #dc2626;
     }
 
     :host ::ng-deep .user-location-marker {
@@ -240,6 +270,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   @Input() selectableLocationMode = false;
   @Input() joinedSidequestIds: readonly (string | number)[] = [];
   @Input() joiningSidequestIds: readonly (string | number)[] = [];
+  @Input() currentUserId: string | number | null = null;
 
   @Output() userLocationChange = new EventEmitter<MapUserLocation>();
   @Output() joinSidequest = new EventEmitter<SidequestMapItem>();
@@ -248,6 +279,16 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
 
   protected mapMessage = '';
   protected locating = false;
+  protected hideJoinedSidequests = false;
+
+  protected toggleJoinedVisibility(): void {
+    this.hideJoinedSidequests = !this.hideJoinedSidequests;
+    this.syncMarkers();
+  }
+
+  protected hasJoinedSidequests(): boolean {
+    return this.joinedSidequestIds.length > 0;
+  }
 
   private readonly http = inject(HttpClient);
   private readonly config = inject(AppConfigService);
@@ -271,7 +312,8 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       changes['initialCenter'] ||
       changes['initialZoom'] ||
       changes['joinedSidequestIds'] ||
-      changes['joiningSidequestIds']
+      changes['joiningSidequestIds'] ||
+      changes['currentUserId']
     ) {
       this.syncMarkers();
     }
@@ -308,7 +350,6 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
       zoom: this.initialZoom
     });
 
-    this.map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
     this.map.on('click', (event) => {
       if (!this.selectableLocationMode) {
         return;
@@ -388,6 +429,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     this.clearMarkers();
 
     const sidequestsWithCoordinates = (this.sidequests ?? [])
+      .filter((sidequest) => !this.hideJoinedSidequests || !this.isJoined(sidequest))
       .map((sidequest) => ({
         sidequest,
         latitude: this.toCoordinate(sidequest.latitude),
@@ -411,7 +453,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     for (const item of sidequestsWithCoordinates) {
       const markerElement = document.createElement('button');
       markerElement.type = 'button';
-      markerElement.className = item.sidequest.id === closestSidequestId ? 'sidequest-marker closest' : 'sidequest-marker';
+      markerElement.className = this.markerClassName(item.sidequest, item.sidequest.id === closestSidequestId);
       markerElement.setAttribute('aria-label', item.sidequest.title ? `Open ${item.sidequest.title}` : 'Open sidequest');
 
       const popup = new this.mapbox.Popup({ offset: 18 }).setDOMContent(
@@ -590,7 +632,7 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     joinButton.type = 'button';
     joinButton.className = 'join-map-btn';
     joinButton.textContent = this.joinButtonText(sidequest);
-    joinButton.disabled = this.isJoined(sidequest) || this.isJoining(sidequest);
+    joinButton.disabled = this.isJoined(sidequest) || this.isJoining(sidequest) || this.isUnavailable(sidequest);
     joinButton.addEventListener('click', () => {
       if (!joinButton.disabled) {
         this.joinSidequest.emit(sidequest);
@@ -608,6 +650,21 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
     link.rel = 'noopener noreferrer';
     link.textContent = label;
     return link;
+  }
+
+  private markerClassName(sidequest: SidequestMapItem, isClosest: boolean): string {
+    const classNames = ['sidequest-marker'];
+    if (isClosest) {
+      classNames.push('closest');
+    }
+
+    if (this.isJoined(sidequest)) {
+      classNames.push('joined');
+    } else if (this.isUnavailable(sidequest)) {
+      classNames.push('unavailable');
+    }
+
+    return classNames.join(' ');
   }
 
   private shortDescription(description: string): string {
@@ -658,7 +715,32 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   }
 
   private isJoined(sidequest: SidequestMapItem): boolean {
-    return sidequest.id !== null && sidequest.id !== undefined && this.joinedSidequestIds.includes(sidequest.id);
+    return (
+      sidequest.id !== null &&
+      sidequest.id !== undefined &&
+      this.joinedSidequestIds.some((joinedId) => joinedId.toString() === sidequest.id?.toString())
+    );
+  }
+
+  private isUnavailable(sidequest: SidequestMapItem): boolean {
+    const status = sidequest.status?.trim().toLowerCase();
+    if (status && status !== 'active') {
+      return true;
+    }
+
+    if (
+      this.currentUserId !== null &&
+      this.currentUserId !== undefined &&
+      sidequest.creatorId !== null &&
+      sidequest.creatorId !== undefined &&
+      sidequest.creatorId.toString() === this.currentUserId.toString()
+    ) {
+      return true;
+    }
+
+    const participantCount = this.toCoordinate(sidequest.participantCount);
+    const maxParticipants = this.toCoordinate(sidequest.maxParticipants);
+    return maxParticipants !== null && participantCount !== null && participantCount >= maxParticipants;
   }
 
   private isJoining(sidequest: SidequestMapItem): boolean {
@@ -668,6 +750,10 @@ export class SidequestMapComponent implements AfterViewInit, OnChanges, OnDestro
   private joinButtonText(sidequest: SidequestMapItem): string {
     if (this.isJoined(sidequest)) {
       return 'Joined';
+    }
+
+    if (this.isUnavailable(sidequest)) {
+      return 'Unable to join';
     }
 
     if (this.isJoining(sidequest)) {
