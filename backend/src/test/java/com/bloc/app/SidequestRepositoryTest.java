@@ -17,7 +17,7 @@ class SidequestRepositoryTest {
     void buildDiscoverableSidequestsQueryIncludesBaseFilteringAndPagination() {
         SidequestRepository.DiscoveryQuery query = sidequestRepository.buildDiscoverableSidequestsQuery(null, null, null, null, 25.0, 20, 0);
 
-        assertTrue(query.sql().contains("where s.status = 'active'"));
+        assertTrue(query.sql().contains("where lower(s.status) = 'active'"));
         assertTrue(query.sql().contains("(s.expires_at is null or s.expires_at > now())"));
         assertTrue(query.sql().contains("order by s.created_at desc"));
         assertTrue(query.sql().contains("limit :limit"));
@@ -85,12 +85,13 @@ class SidequestRepositoryTest {
     }
 
     @Test
-    void buildJoinedSidequestsQueryFiltersByParticipantUserIdOnly() {
+    void buildJoinedSidequestsQueryFiltersByParticipantUserIdAndExcludesDeleted() {
         String sql = sidequestRepository.buildJoinedSidequestsQuery();
 
         assertTrue(sql.contains("from sidequest_participants sp"));
         assertTrue(sql.contains("join sidequests s on s.id = sp.sidequest_id"));
         assertTrue(sql.contains("where sp.user_id = :userId"));
+        assertTrue(sql.contains("lower(s.status) <> 'deleted'"));
         assertFalse(sql.contains("s.creator_id = :userId"));
         assertTrue(sql.contains("order by sp.joined_at desc"));
     }

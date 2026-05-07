@@ -6,7 +6,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,6 +33,7 @@ import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
 import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
+import com.bloc.app.dto.UpdateSidequestRequest;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.security.SecurityConfig;
 import com.bloc.app.service.SidequestService;
@@ -113,6 +116,40 @@ class SidequestSecurityWebMvcTest {
     void sidequestDetailsRejectsInvalidBearerToken() throws Exception {
         mockMvc.perform(get("/api/sidequests/{sidequestId}", "33333333-3333-3333-3333-333333333333")
                         .header(AUTHORIZATION, "Bearer not-a-real-token"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void updateSidequestRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(patch("/api/sidequests/{sidequestId}", "33333333-3333-3333-3333-333333333333")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateSidequestPayload()))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void deleteSidequestRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(delete("/api/sidequests/{sidequestId}", "33333333-3333-3333-3333-333333333333"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void completeSidequestRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/complete", "33333333-3333-3333-3333-333333333333"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void leaveSidequestRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(delete("/api/sidequests/{sidequestId}/participants/me", "33333333-3333-3333-3333-333333333333"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(sidequestService);
@@ -326,6 +363,78 @@ class SidequestSecurityWebMvcTest {
     }
 
     @Test
+    void updateSidequestUsesAuthenticatedUserContext() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.updateSidequest(any(), any(), any())).thenReturn(sampleDetailResponse(creatorId, creatorId));
+
+        mockMvc.perform(patch("/api/sidequests/{sidequestId}", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(creatorId.toString())
+                                .claim("email", "creator@bloc.test")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateSidequestPayload()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentUserIsCreator").value(false));
+
+        ArgumentCaptor<UpdateSidequestRequest> requestCaptor = ArgumentCaptor.forClass(UpdateSidequestRequest.class);
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).updateSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), requestCaptor.capture(), userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("Updated title", requestCaptor.getValue().title());
+        org.junit.jupiter.api.Assertions.assertEquals(creatorId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void deleteSidequestUsesAuthenticatedUserContext() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
+        mockMvc.perform(delete("/api/sidequests/{sidequestId}", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(creatorId.toString())
+                                .claim("email", "creator@bloc.test"))))
+                .andExpect(status().isNoContent());
+
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).deleteSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(creatorId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void completeSidequestUsesAuthenticatedUserContext() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.completeSidequest(any(), any())).thenReturn(sampleDetailResponse(creatorId, creatorId));
+
+        mockMvc.perform(post("/api/sidequests/{sidequestId}/complete", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(creatorId.toString())
+                                .claim("email", "creator@bloc.test"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Library sprint"));
+
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).completeSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(creatorId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void leaveSidequestUsesAuthenticatedUserContext() throws Exception {
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
+        mockMvc.perform(delete("/api/sidequests/{sidequestId}/participants/me", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isNoContent());
+
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).leaveSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(joinerId, userCaptor.getValue().userId());
+    }
+
+    @Test
     void joinSidequestRejectsJoiningOwnSidequest() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -431,6 +540,19 @@ class SidequestSecurityWebMvcTest {
                   "latitude": 42.3910,
                   "longitude": -72.5266,
                   "maxParticipants": 8
+                }
+                """;
+    }
+
+    private String updateSidequestPayload() {
+        return """
+                {
+                  "title": "Updated title",
+                  "description": "Updated description",
+                  "locationName": "Updated location",
+                  "latitude": 42.4000,
+                  "longitude": -72.5000,
+                  "maxParticipants": 9
                 }
                 """;
     }
