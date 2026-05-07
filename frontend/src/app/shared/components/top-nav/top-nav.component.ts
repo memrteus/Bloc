@@ -23,8 +23,8 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      padding: 0.85rem 1rem;
-      margin: 0.85rem 1rem 0;
+      padding: 0.85rem 1.5rem;
+      margin: 0.85rem 0.5rem 0;
       border-radius: 14px;
       border: 1px solid rgba(163, 179, 190, 0.5);
       background: rgba(255, 255, 255, 0.7);
@@ -50,10 +50,11 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 
     .nav-links a {
       text-decoration: none;
-      padding: 0.4rem 0.68rem;
+      padding: 0.65rem 1rem;
       border-radius: 999px;
       color: #4f6876;
-      font-size: 0.87rem;
+      font-size: 0.95rem;
+      font-weight: 600;
     }
 
     .nav-links a.active,

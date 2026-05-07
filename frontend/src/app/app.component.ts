@@ -12,7 +12,8 @@ import { RouterOutlet } from '@angular/router';
   `,
   styles: [`
     .app-content {
-      padding: 0 0 1rem;
+      width: 100%;
+      padding: 0;
     }
   `]
 })
