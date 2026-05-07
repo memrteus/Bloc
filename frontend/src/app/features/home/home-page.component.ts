@@ -53,9 +53,26 @@ interface CreateSidequestForm {
         </nav>
 
         <div class="sidebar-panel">
-          <p class="mono-title">My quests</p>
-          <p *ngFor="let questTitle of myQuestTitles">{{ questTitle }}</p>
-          <p *ngIf="myQuestTitles.length === 0">No quests yet</p>
+          <p class="mono-title">My Sidequests</p>
+          <p *ngIf="myJoinedLoading">Loading...</p>
+          <p class="sidebar-error" *ngIf="!myJoinedLoading && myJoinedError">{{ myJoinedError }}</p>
+          <button
+            type="button"
+            class="sidebar-quest"
+            *ngFor="let sidequest of myJoinedPreview"
+            (click)="openSidequestDetails(sidequest)"
+          >
+            {{ sidequest.title }}
+          </button>
+          <p *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length === 0">No quests yet</p>
+          <button
+            type="button"
+            class="sidebar-link"
+            *ngIf="!myJoinedLoading && myJoinedSidequests.length > 5"
+            (click)="showMySidequestsTab()"
+          >
+            View all
+          </button>
         </div>
 
         <div class="user-card">
@@ -72,8 +89,8 @@ interface CreateSidequestForm {
       <main class="dashboard-main">
         <header class="main-header">
           <div>
-            <p class="mono-title">{{ activeMainTab === 'discover' ? 'Community feed' : 'Create sidequest' }}</p>
-            <h1>{{ activeMainTab === 'discover' ? 'Browse groups' : 'Create sidequest' }}</h1>
+            <p class="mono-title">{{ mainEyebrow() }}</p>
+            <h1>{{ mainTitle() }}</h1>
           </div>
           <div class="header-actions" *ngIf="activeMainTab === 'discover'">
             <input
@@ -88,6 +105,9 @@ interface CreateSidequestForm {
           </div>
           <div class="header-actions" *ngIf="activeMainTab === 'create'">
             <button type="button" class="primary-btn" (click)="showDiscoverTab()">Back to discovery</button>
+          </div>
+          <div class="header-actions" *ngIf="activeMainTab === 'my'">
+            <button type="button" class="primary-btn" (click)="showDiscoverTab()">Browse groups</button>
           </div>
         </header>
 
@@ -160,6 +180,83 @@ interface CreateSidequestForm {
         </ng-container>
 
         <ng-template #createTabContent>
+          <ng-container *ngIf="activeMainTab === 'my'; else createFormContent">
+            <section class="my-sidequests-tab">
+              <p class="meta" *ngIf="myJoinedLoading">Loading your sidequests...</p>
+              <p class="meta error-text" *ngIf="!myJoinedLoading && myJoinedError">{{ myJoinedError }}</p>
+              <p class="meta" *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length === 0">
+                You haven't joined any sidequests yet.
+              </p>
+
+              <div
+                class="my-sidequest-scroll"
+                [class.compact]="myJoinedSidequests.length > 4"
+                *ngIf="!myJoinedLoading && !myJoinedError && myJoinedSidequests.length > 0"
+              >
+                <section class="my-sidequest-section" *ngIf="myParticipantSidequests.length > 0">
+                  <p class="participant-title">Joined</p>
+                  <section class="group-grid my-sidequest-grid">
+                    <article
+                      class="group-card"
+                      *ngFor="let sidequest of myParticipantSidequests; index as i"
+                      [style.--delay.ms]="i * 45"
+                      role="button"
+                      tabindex="0"
+                      (click)="openSidequestDetails(sidequest)"
+                      (keydown.enter)="openSidequestDetails(sidequest)"
+                    >
+                      <div class="card-top">
+                        <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+                        <div>
+                          <h3>{{ sidequest.title }}</h3>
+                          <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                        </div>
+                      </div>
+                      <p class="desc">{{ sidequest.description }}</p>
+                      <div class="card-foot">
+                        <span class="tag">{{ sidequest.category || 'General' }}</span>
+                        <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                          {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
+                        </span>
+                      </div>
+                    </article>
+                  </section>
+                </section>
+
+                <section class="my-sidequest-section" *ngIf="myCreatedSidequests.length > 0">
+                  <p class="participant-title">Created by you</p>
+                  <section class="group-grid my-sidequest-grid">
+                    <article
+                      class="group-card"
+                      *ngFor="let sidequest of myCreatedSidequests; index as i"
+                      [style.--delay.ms]="(myParticipantSidequests.length + i) * 45"
+                      role="button"
+                      tabindex="0"
+                      (click)="openSidequestDetails(sidequest)"
+                      (keydown.enter)="openSidequestDetails(sidequest)"
+                    >
+                      <div class="card-top">
+                        <div class="icon-chip">{{ getCategoryInitial(sidequest.category) }}</div>
+                        <div>
+                          <h3>{{ sidequest.title }}</h3>
+                          <p>{{ sidequest.maxParticipants ?? 0 }} max participants</p>
+                        </div>
+                      </div>
+                      <p class="desc">{{ sidequest.description }}</p>
+                      <div class="card-foot">
+                        <span class="tag">{{ sidequest.category || 'General' }}</span>
+                        <span [class]="isSidequestActive(sidequest) ? 'status active' : 'status quiet'">
+                          {{ isSidequestActive(sidequest) ? 'Active' : 'Closed' }}
+                        </span>
+                      </div>
+                    </article>
+                  </section>
+                </section>
+              </div>
+            </section>
+          </ng-container>
+
+          <ng-template #createFormContent>
           <section class="create-tab-card">
             <p class="mono-title">Create sidequest</p>
             <h2>Create a new group</h2>
@@ -244,6 +341,7 @@ interface CreateSidequestForm {
               <p class="meta" *ngIf="createMessage">{{ createMessage }}</p>
             </form>
           </section>
+          </ng-template>
         </ng-template>
 
         <section class="quest-panel-backdrop" *ngIf="selectedSidequest || detailsLoading" (click)="closeSidequestDetails()">
@@ -318,8 +416,10 @@ interface CreateSidequestForm {
             [requestLocationOnInit]="true"
             [joinedSidequestIds]="joinedMapSidequestIds"
             [joiningSidequestIds]="joiningMapSidequestIds"
+            [currentUserId]="currentUserId"
             (userLocationChange)="onMapUserLocation($event)"
             (joinSidequest)="joinSidequestFromMap($event)"
+            (openSidequest)="openSidequestDetails($event)"
           ></app-sidequest-map>
         </aside>
       </main>
@@ -334,7 +434,7 @@ interface CreateSidequestForm {
     }
 
     .dashboard-wrap {
-      max-width: 1400px;
+      max-width: 1220px;
       width: 100%;
       margin: 0 auto;
       border: 1px solid rgba(167, 182, 194, 0.46);
@@ -344,13 +444,20 @@ interface CreateSidequestForm {
       box-shadow: 0 24px 56px rgba(14, 31, 45, 0.14);
       display: grid;
       grid-template-columns: 248px 1fr;
-      overflow: hidden;
+      align-items: start;
+      overflow: visible;
     }
 
     .sidebar {
+      position: sticky;
+      top: 1.25rem;
+      min-height: calc(100vh - 3rem);
+      max-height: calc(100vh - 3rem);
+      overflow-y: auto;
       background: linear-gradient(180deg, #143142 0%, #102534 100%);
       color: #d6e8f0;
       border-right: 1px solid rgba(159, 183, 195, 0.24);
+      border-radius: 24px 0 0 24px;
       padding: 1.25rem 1rem;
       display: flex;
       flex-direction: column;
@@ -396,17 +503,13 @@ interface CreateSidequestForm {
       text-decoration: none;
       color: #b7d1dc;
       border: 0;
-      border-radius: 14px;
-      padding: 0.85rem 1rem;
-      font-size: 1rem;
-      font-weight: 600;
-      transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+      border-radius: 10px;
+      padding: 0.58rem 0.7rem;
+      font-size: 0.9rem;
+      transition: background 0.15s ease, color 0.15s ease;
       background: transparent;
       text-align: left;
       cursor: pointer;
-      min-height: 48px;
-      display: inline-flex;
-      align-items: center;
     }
 
     .menu-item:hover {
@@ -431,6 +534,39 @@ interface CreateSidequestForm {
       margin: 0 0 0.5rem;
       font-size: 0.84rem;
       color: #c3dae4;
+    }
+
+    .sidebar-panel .sidebar-error {
+      color: #f1b7b7;
+    }
+
+    .sidebar-quest,
+    .sidebar-link {
+      border: 0;
+      background: transparent;
+      color: #8ed5e7;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .sidebar-quest {
+      width: 100%;
+      display: block;
+      margin: 0 0 0.5rem;
+      color: #c3dae4;
+      font-size: 0.84rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-quest:hover {
+      color: #eff9fd;
     }
 
     .mono-title {
@@ -810,6 +946,36 @@ interface CreateSidequestForm {
       padding: 1rem 1rem 1.1rem;
     }
 
+    .my-sidequests-tab {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .my-sidequest-scroll {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .my-sidequest-section {
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .error-text {
+      color: #a33c3c;
+      font-weight: 700;
+    }
+
+    .my-sidequest-scroll.compact {
+      max-height: 500px;
+      overflow-y: auto;
+      padding-right: 0.35rem;
+    }
+
+    .my-sidequest-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .simple-create-form {
       margin-top: 0.8rem;
       display: grid;
@@ -1003,11 +1169,17 @@ interface CreateSidequestForm {
 
       .dashboard-wrap {
         grid-template-columns: 1fr;
+        overflow: hidden;
       }
 
       .sidebar {
+        position: static;
+        min-height: 0;
+        max-height: none;
+        overflow-y: visible;
         border-right: none;
         border-bottom: 1px solid rgba(159, 183, 195, 0.24);
+        border-radius: 24px 24px 0 0;
       }
 
       .main-header {
@@ -1026,6 +1198,10 @@ interface CreateSidequestForm {
       }
 
       .group-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .my-sidequest-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1061,8 +1237,11 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected sidequests: DiscoverSidequestResponse[] = [];
   protected featuredSidequest: DiscoverSidequestResponse | null = null;
   protected discoveredCategories: string[] = [];
-  protected myQuestTitles: string[] = [];
-  protected activeMainTab: 'discover' | 'create' = 'discover';
+  protected myJoinedSidequests: DiscoverSidequestResponse[] = [];
+  protected myJoinedPreview: DiscoverSidequestResponse[] = [];
+  protected myCreatedSidequests: DiscoverSidequestResponse[] = [];
+  protected myParticipantSidequests: DiscoverSidequestResponse[] = [];
+  protected activeMainTab: 'discover' | 'create' | 'my' = 'discover';
   protected selectedCategory: string | null = null;
   protected searchTerm = '';
   protected displayName = 'Profile';
@@ -1078,6 +1257,8 @@ export class HomePageComponent implements OnInit, OnDestroy {
   protected createMessage = '';
   protected isLoading = false;
   protected errorMessage = '';
+  protected myJoinedLoading = false;
+  protected myJoinedError = '';
   protected mapDrawerOpen = false;
   protected mapRadiusMiles = 25;
   protected mapUserLocation: MapUserLocation | null = null;
@@ -1102,6 +1283,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadCurrentUser();
     this.loadSidequests(true);
+    this.loadMyJoinedSidequests(true);
     this.locationSearchSubscription = this.locationSearchInput
       .pipe(
         debounceTime(250),
@@ -1117,7 +1299,10 @@ export class HomePageComponent implements OnInit, OnDestroy {
     this.mapRadiusSubscription = this.mapRadiusInput
       .pipe(debounceTime(250), distinctUntilChanged())
       .subscribe(() => this.loadNearbySidequests());
-    this.refreshTimer = setInterval(() => this.loadSidequests(false), 30000);
+    this.refreshTimer = setInterval(() => {
+      this.loadSidequests(false);
+      this.loadMyJoinedSidequests(false);
+    }, 30000);
   }
 
   ngOnDestroy(): void {
@@ -1229,20 +1414,29 @@ export class HomePageComponent implements OnInit, OnDestroy {
     return `${deltaDays} day${deltaDays > 1 ? 's' : ''} ago`;
   }
 
-  protected openSidequestDetails(sidequest: DiscoverSidequestResponse): void {
-    this.detailsLoading = true;
-    this.detailsError = '';
-    this.joinMessage = '';
-    this.selectedSidequest = null;
+  protected mainEyebrow(): string {
+    if (this.activeMainTab === 'my') {
+      return 'Joined sidequests';
+    }
 
-    this.sidequestApi.getById(sidequest.id).pipe(finalize(() => (this.detailsLoading = false))).subscribe({
-      next: (response) => {
-        this.selectedSidequest = response;
-      },
-      error: () => {
-        this.detailsError = 'Unable to load sidequest details right now.';
-      }
-    });
+    return this.activeMainTab === 'discover' ? 'Community feed' : 'Create sidequest';
+  }
+
+  protected mainTitle(): string {
+    if (this.activeMainTab === 'my') {
+      return 'My Sidequests';
+    }
+
+    return this.activeMainTab === 'discover' ? 'Browse groups' : 'Create sidequest';
+  }
+
+  protected openSidequestDetails(sidequest: { id?: string | number | null }): void {
+    const sidequestId = sidequest.id?.toString();
+    if (!sidequestId) {
+      return;
+    }
+
+    void this.router.navigate(['/sidequests', sidequestId]);
   }
 
   protected showDiscoverTab(): void {
@@ -1258,10 +1452,19 @@ export class HomePageComponent implements OnInit, OnDestroy {
     this.createMessage = '';
   }
 
+  protected showMySidequestsTab(): void {
+    this.activeMainTab = 'my';
+    this.mapDrawerOpen = false;
+    this.closeSidequestDetails();
+    if (this.myJoinedSidequests.length === 0 && !this.myJoinedLoading) {
+      this.loadMyJoinedSidequests(true);
+    }
+  }
+
   protected openMapDrawer(): void {
     this.activeMainTab = 'discover';
     this.closeSidequestDetails();
-    this.mapSidequests = this.sidequests;
+    this.mapSidequests = this.filterMapSidequests(this.allSidequests);
     this.mapMessage = '';
     this.mapDrawerOpen = true;
   }
@@ -1302,6 +1505,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
         next: () => {
           this.joinedMapSidequestIds = [...new Set([...this.joinedMapSidequestIds, sidequestId])];
           this.mapMessage = 'Joined sidequest.';
+          this.loadMyJoinedSidequests(false);
           this.loadNearbySidequests();
           this.loadSidequests(false);
         },
@@ -1348,6 +1552,8 @@ export class HomePageComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.selectedSidequest = response;
           this.joinMessage = 'You joined this quest.';
+          this.joinedMapSidequestIds = [...new Set([...this.joinedMapSidequestIds, response.id])];
+          this.loadMyJoinedSidequests(false);
           this.loadSidequests(false);
         },
         error: () => {
@@ -1382,6 +1588,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.detailsLoading = false;
           this.joinMessage = '';
           this.loadSidequests(false);
+          this.loadMyJoinedSidequests(false);
           if (this.mapDrawerOpen && this.mapUserLocation) {
             this.loadNearbySidequests();
           }
@@ -1543,14 +1750,42 @@ export class HomePageComponent implements OnInit, OnDestroy {
           this.sidequests = [];
           this.featuredSidequest = null;
           this.discoveredCategories = [];
-          this.myQuestTitles = [];
+        }
+      });
+  }
+
+  private loadMyJoinedSidequests(showLoader: boolean): void {
+    if (showLoader) {
+      this.myJoinedLoading = true;
+    }
+
+    this.myJoinedError = '';
+
+    this.sidequestApi
+      .getMyJoined()
+      .pipe(finalize(() => (this.myJoinedLoading = false)))
+      .subscribe({
+        next: (response) => {
+          this.myJoinedSidequests = response;
+          this.myJoinedPreview = response.slice(0, 5);
+          this.updateMySidequestGroups();
+          this.joinedMapSidequestIds = response.map((sidequest) => sidequest.id);
+          this.applyClientFilters();
+        },
+        error: () => {
+          this.myJoinedError = 'Unable to load your sidequests right now.';
+          this.myJoinedSidequests = [];
+          this.myJoinedPreview = [];
+          this.updateMySidequestGroups();
+          this.joinedMapSidequestIds = [];
+          this.applyClientFilters();
         }
       });
   }
 
   private loadNearbySidequests(): void {
     if (!this.mapUserLocation) {
-      this.mapSidequests = this.sidequests;
+      this.mapSidequests = this.filterMapSidequests(this.allSidequests);
       return;
     }
 
@@ -1583,7 +1818,7 @@ export class HomePageComponent implements OnInit, OnDestroy {
     const normalizedSearch = this.searchTerm.trim().toLowerCase();
     const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
 
-    this.sidequests = this.allSidequests.filter((sidequest) => {
+    this.sidequests = this.filterDiscoverableSidequests(this.allSidequests).filter((sidequest) => {
       const sidequestCategory = sidequest.category?.trim().toLowerCase() ?? '';
       const matchesCategory = !normalizedCategory || sidequestCategory === normalizedCategory;
 
@@ -1604,11 +1839,41 @@ export class HomePageComponent implements OnInit, OnDestroy {
     });
 
     this.featuredSidequest = this.sidequests.length > 0 ? this.sidequests[0] : null;
-    this.myQuestTitles = this.sidequests.slice(0, 3).map((sidequest) => sidequest.title);
 
     if (!this.mapUserLocation) {
-      this.mapSidequests = this.sidequests;
+      this.mapSidequests = this.filterMapSidequests(this.allSidequests);
     }
+  }
+
+  private filterMapSidequests(sidequests: DiscoverSidequestResponse[]): DiscoverSidequestResponse[] {
+    const normalizedSearch = this.searchTerm.trim().toLowerCase();
+    const normalizedCategory = this.selectedCategory?.trim().toLowerCase() ?? null;
+
+    return sidequests.filter((sidequest) => {
+      const sidequestCategory = sidequest.category?.trim().toLowerCase() ?? '';
+      const matchesCategory = !normalizedCategory || sidequestCategory === normalizedCategory;
+
+      if (!matchesCategory) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [sidequest.title, sidequest.description, sidequest.category, sidequest.locationName]
+        .filter((value): value is string => Boolean(value))
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }
+
+  private filterDiscoverableSidequests(sidequests: DiscoverSidequestResponse[]): DiscoverSidequestResponse[] {
+    const joinedSidequestIds = new Set(this.myJoinedSidequests.map((sidequest) => sidequest.id));
+
+    return sidequests.filter((sidequest) => sidequest.creatorId !== this.currentUserId && !joinedSidequestIds.has(sidequest.id));
   }
 
   private loadCurrentUser(): void {
@@ -1618,14 +1883,29 @@ export class HomePageComponent implements OnInit, OnDestroy {
         this.displayName = preferredName;
         this.userInitial = preferredName.charAt(0).toUpperCase();
         this.currentUserId = user.userId;
+        this.updateMySidequestGroups();
+        this.applyClientFilters();
       },
       error: () => {
         const fallbackEmail = localStorage.getItem('bloc.userEmail') || 'Profile';
         this.displayName = fallbackEmail;
         this.userInitial = this.displayName.charAt(0).toUpperCase();
         this.currentUserId = localStorage.getItem('bloc.userId');
+        this.updateMySidequestGroups();
+        this.applyClientFilters();
       }
     });
+  }
+
+  private updateMySidequestGroups(): void {
+    if (!this.currentUserId) {
+      this.myCreatedSidequests = [];
+      this.myParticipantSidequests = this.myJoinedSidequests;
+      return;
+    }
+
+    this.myCreatedSidequests = this.myJoinedSidequests.filter((sidequest) => sidequest.creatorId === this.currentUserId);
+    this.myParticipantSidequests = this.myJoinedSidequests.filter((sidequest) => sidequest.creatorId !== this.currentUserId);
   }
 
   private normalizeCategory(category: string | null | undefined): string | null {

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
+import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.SidequestService;
@@ -42,9 +43,16 @@ public class SidequestController {
         return sidequestService.discoverSidequests(search, category, lat, lng, radiusMiles, limit, offset);
     }
 
+    @GetMapping("/my-joined")
+    public List<DiscoverSidequestResponse> getMyJoinedSidequests(@AuthenticationPrincipal Jwt jwt) {
+        return sidequestService.getMyJoinedSidequests(AuthenticatedUser.fromJwt(jwt));
+    }
+
     @GetMapping("/{sidequestId}")
-    public SidequestResponse getSidequest(@PathVariable String sidequestId) {
-        return sidequestService.getSidequest(sidequestId);
+    public SidequestDetailResponse getSidequest(
+            @PathVariable String sidequestId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return sidequestService.getSidequest(sidequestId, AuthenticatedUser.fromJwt(jwt));
     }
 
     @PostMapping

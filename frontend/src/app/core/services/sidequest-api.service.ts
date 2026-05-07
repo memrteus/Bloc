@@ -13,6 +13,7 @@ export interface DiscoverSidequestResponse {
   startsAt: string | null;
   expiresAt: string | null;
   maxParticipants: number | null;
+  participantCount: number;
   status: string;
   creatorId: string;
   distanceMiles: number | null;
@@ -60,11 +61,43 @@ export interface SidequestResponse {
   createdAt: string;
 }
 
+export interface SidequestUserSummary {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface SidequestParticipantSummary extends SidequestUserSummary {
+  joinedAt: string | null;
+}
+
+export interface SidequestDetailResponse {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  locationName: string;
+  latitude: number | null;
+  longitude: number | null;
+  startsAt: string | null;
+  expiresAt: string | null;
+  maxParticipants: number | null;
+  status: string;
+  distanceMiles: number | null;
+  updatedAt: string;
+  createdAt: string;
+  creator: SidequestUserSummary;
+  participants: SidequestParticipantSummary[];
+  participantCount: number;
+  currentUserIsCreator: boolean;
+  currentUserHasJoined: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SidequestApiService {
   private readonly http = inject(HttpClient);
   private readonly discoverCache = new Map<string, { expiresAt: number; data: DiscoverSidequestResponse[] }>();
-  private readonly detailCache = new Map<string, { expiresAt: number; data: SidequestResponse }>();
+  private readonly detailCache = new Map<string, { expiresAt: number; data: SidequestDetailResponse }>();
 
   private readonly discoverTtlMs = 20_000;
   private readonly detailTtlMs = 20_000;
@@ -114,14 +147,14 @@ export class SidequestApiService {
     );
   }
 
-  getById(sidequestId: string): Observable<SidequestResponse> {
+  getById(sidequestId: string): Observable<SidequestDetailResponse> {
     const now = Date.now();
     const cached = this.detailCache.get(sidequestId);
     if (cached && cached.expiresAt > now) {
       return of(cached.data);
     }
 
-    return this.http.get<SidequestResponse>(`/sidequests/${sidequestId}`).pipe(
+    return this.http.get<SidequestDetailResponse>(`/sidequests/${sidequestId}`).pipe(
       tap((data) => {
         this.detailCache.set(sidequestId, {
           data,
@@ -131,26 +164,24 @@ export class SidequestApiService {
     );
   }
 
+  getMyJoined(): Observable<DiscoverSidequestResponse[]> {
+    return this.http.get<DiscoverSidequestResponse[]>('/sidequests/my-joined');
+  }
+
   create(request: CreateSidequestRequest): Observable<SidequestResponse> {
     return this.http.post<SidequestResponse>('/sidequests', request).pipe(
-      tap((data) => {
-        this.detailCache.set(data.id, {
-          data,
-          expiresAt: Date.now() + this.detailTtlMs
-        });
+      tap(() => {
         this.discoverCache.clear();
+        this.detailCache.clear();
       })
     );
   }
 
   join(sidequestId: string): Observable<SidequestResponse> {
     return this.http.post<SidequestResponse>(`/sidequests/${sidequestId}/join`, {}).pipe(
-      tap((data) => {
-        this.detailCache.set(sidequestId, {
-          data,
-          expiresAt: Date.now() + this.detailTtlMs
-        });
+      tap(() => {
         this.discoverCache.clear();
+        this.detailCache.delete(sidequestId);
       })
     );
   }

@@ -11,9 +11,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
+import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.model.Sidequest;
 import com.bloc.app.repository.SidequestRepository;
+import com.bloc.app.repository.SidequestRepository.SidequestParticipantSummary;
+import com.bloc.app.repository.SidequestRepository.SidequestUserSummary;
 import com.bloc.app.security.AuthenticatedUser;
 
 @Service
@@ -58,13 +61,25 @@ public class SidequestService {
     }
 
     @Transactional(readOnly = true)
-    public SidequestResponse getSidequest(String sidequestId) {
+    public SidequestDetailResponse getSidequest(String sidequestId, AuthenticatedUser user) {
         UUID parsedSidequestId = parseUuid(sidequestId, "sidequestId");
         if (!sidequestRepository.sidequestExists(parsedSidequestId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Sidequest not found.");
         }
 
-        return SidequestResponse.fromModel(sidequestRepository.getRequiredSidequest(parsedSidequestId));
+        Sidequest sidequest = sidequestRepository.getRequiredSidequest(parsedSidequestId);
+        SidequestUserSummary creator = sidequestRepository.findUserSummary(sidequest.creatorId())
+                .orElseGet(() -> new SidequestUserSummary(sidequest.creatorId(), sidequest.creatorId().toString(), null));
+        List<SidequestParticipantSummary> participants = sidequestRepository.findParticipantSummaries(parsedSidequestId);
+        return SidequestDetailResponse.fromModel(sidequest, creator, participants, user.userId(), resolveStatus(sidequest));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DiscoverSidequestResponse> getMyJoinedSidequests(AuthenticatedUser user) {
+        return sidequestRepository.findJoinedSidequestsOrderByJoinedAtDesc(user.userId())
+                .stream()
+                .map(DiscoverSidequestResponse::fromModel)
+                .toList();
     }
 
     @Transactional
@@ -123,6 +138,11 @@ public class SidequestService {
         if (sidequest.participantUserIds().contains(user.userId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "You have already joined this sidequest.");
         }
+
+        if (sidequest.maxParticipants() != null
+                && sidequest.participantUserIds().size() >= sidequest.maxParticipants()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This sidequest is full.");
+        }
     }
 
     private void validateDiscoveryPagination(int limit, int offset) {
@@ -159,6 +179,19 @@ public class SidequestService {
         }
 
         return Math.max(MIN_RADIUS_MILES, Math.min(MAX_RADIUS_MILES, radiusMiles));
+    }
+
+    private String resolveStatus(Sidequest sidequest) {
+        String status = sidequest.status() != null ? sidequest.status().trim().toLowerCase() : "active";
+        if ("completed".equals(status)) {
+            return "completed";
+        }
+
+        if (sidequest.expiresAt() != null && sidequest.expiresAt().isBefore(Instant.now())) {
+            return "expired";
+        }
+
+        return status.isBlank() ? "active" : status;
     }
 
     private UUID parseUuid(String rawValue, String fieldName) {
