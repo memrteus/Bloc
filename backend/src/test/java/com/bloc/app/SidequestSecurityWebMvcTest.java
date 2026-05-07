@@ -386,6 +386,7 @@ class SidequestSecurityWebMvcTest {
                 Instant.parse("2026-04-07T18:00:00Z"),
                 Instant.parse("2026-04-08T18:00:00Z"),
                 8,
+                1,
                 "active",
                 creatorId,
                 null,
