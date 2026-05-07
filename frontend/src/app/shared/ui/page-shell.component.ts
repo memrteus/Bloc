@@ -17,8 +17,9 @@ import { Component, Input } from '@angular/core';
   `,
   styles: [`
     .page-shell {
-      max-width: 860px;
-      margin: 0 auto;
+      width: calc(100% - 3rem);
+      max-width: 1400px;
+      margin: 2rem auto;
       background: #ffffff;
       border: 1px solid #dbe3ee;
       border-radius: 20px;

@@ -334,7 +334,7 @@ interface CreateSidequestForm {
     }
 
     .dashboard-wrap {
-      max-width: 1220px;
+      max-width: 1400px;
       width: 100%;
       margin: 0 auto;
       border: 1px solid rgba(167, 182, 194, 0.46);
@@ -396,13 +396,17 @@ interface CreateSidequestForm {
       text-decoration: none;
       color: #b7d1dc;
       border: 0;
-      border-radius: 10px;
-      padding: 0.58rem 0.7rem;
-      font-size: 0.9rem;
-      transition: background 0.15s ease, color 0.15s ease;
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
       background: transparent;
       text-align: left;
       cursor: pointer;
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
     }
 
     .menu-item:hover {
