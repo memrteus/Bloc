@@ -21,8 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
+import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.model.Sidequest;
 import com.bloc.app.repository.SidequestRepository;
+import com.bloc.app.repository.SidequestRepository.SidequestParticipantSummary;
+import com.bloc.app.repository.SidequestRepository.SidequestUserSummary;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.service.SidequestService;
 
@@ -169,6 +172,86 @@ class SidequestServiceTest {
     }
 
     @Test
+    void getSidequestBuildsDetailResponseForAuthenticatedUser() {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        AuthenticatedUser user = new AuthenticatedUser(joinerId, "joiner@bloc.test");
+        Sidequest sidequest = sampleSidequestWithParticipants(creatorId, List.of(creatorId, joinerId));
+        List<SidequestParticipantSummary> participants = List.of(
+                new SidequestParticipantSummary(creatorId, "Creator", null, Instant.parse("2026-04-07T17:01:00Z")),
+                new SidequestParticipantSummary(joinerId, "Joiner", null, Instant.parse("2026-04-07T17:02:00Z")));
+
+        when(sidequestRepository.sidequestExists(sidequestId)).thenReturn(true);
+        when(sidequestRepository.getRequiredSidequest(sidequestId)).thenReturn(sidequest);
+        when(sidequestRepository.findUserSummary(creatorId))
+                .thenReturn(java.util.Optional.of(new SidequestUserSummary(creatorId, "Creator", null)));
+        when(sidequestRepository.findParticipantSummaries(sidequestId)).thenReturn(participants);
+
+        SidequestDetailResponse response = sidequestService.getSidequest(sidequestId.toString(), user);
+
+        assertEquals(sidequestId, response.id());
+        assertEquals("Creator", response.creator().displayName());
+        assertEquals(2, response.participantCount());
+        assertEquals("Joiner", response.participants().get(1).displayName());
+        assertEquals(false, response.currentUserIsCreator());
+        assertEquals(true, response.currentUserHasJoined());
+        assertEquals("expired", response.status());
+    }
+
+    @Test
+    void getSidequestReturnsCompletedStatusBeforeExpiredStatus() {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        AuthenticatedUser user = new AuthenticatedUser(creatorId, "creator@bloc.test");
+        Sidequest completedSidequest = new Sidequest(
+                sidequestId,
+                creatorId,
+                "Library sprint",
+                "Focus session before class",
+                "study",
+                "Main library",
+                BigDecimal.valueOf(42.3910),
+                BigDecimal.valueOf(-72.5266),
+                Instant.parse("2026-04-07T18:00:00Z"),
+                Instant.parse("2026-04-08T18:00:00Z"),
+                8,
+                "completed",
+                null,
+                Instant.parse("2026-04-07T17:00:00Z"),
+                Instant.parse("2026-04-07T17:00:00Z"),
+                List.of(creatorId),
+                List.of("Creator"));
+
+        when(sidequestRepository.sidequestExists(sidequestId)).thenReturn(true);
+        when(sidequestRepository.getRequiredSidequest(sidequestId)).thenReturn(completedSidequest);
+        when(sidequestRepository.findUserSummary(creatorId))
+                .thenReturn(java.util.Optional.of(new SidequestUserSummary(creatorId, "Creator", null)));
+        when(sidequestRepository.findParticipantSummaries(sidequestId))
+                .thenReturn(List.of(new SidequestParticipantSummary(creatorId, "Creator", null, Instant.parse("2026-04-07T17:01:00Z"))));
+
+        SidequestDetailResponse response = sidequestService.getSidequest(sidequestId.toString(), user);
+
+        assertEquals("completed", response.status());
+        assertEquals(true, response.currentUserIsCreator());
+        assertEquals(true, response.currentUserHasJoined());
+    }
+
+    @Test
+    void getSidequestRejectsUnknownSidequest() {
+        UUID userId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        AuthenticatedUser user = new AuthenticatedUser(userId, "joiner@bloc.test");
+        when(sidequestRepository.sidequestExists(sidequestId)).thenReturn(false);
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> sidequestService.getSidequest(sidequestId.toString(), user));
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
+    }
+
+    @Test
     void joinSidequestRejectsJoiningOwnSidequest() {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -207,6 +290,48 @@ class SidequestServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
         assertEquals("You have already joined this sidequest.", exception.getReason());
+        verify(sidequestRepository).profileExists(joinerId);
+        verify(sidequestRepository).sidequestExists(sidequestId);
+        verify(sidequestRepository).getRequiredSidequest(sidequestId);
+        verifyNoMoreInteractions(sidequestRepository);
+    }
+
+    @Test
+    void joinSidequestRejectsFullSidequest() {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID participantId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID joinerId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        AuthenticatedUser user = new AuthenticatedUser(joinerId, "joiner@bloc.test");
+        Sidequest fullSidequest = new Sidequest(
+                sidequestId,
+                creatorId,
+                "Library sprint",
+                "Focus session before class",
+                "study",
+                "Main library",
+                BigDecimal.valueOf(42.3910),
+                BigDecimal.valueOf(-72.5266),
+                Instant.parse("2026-04-07T18:00:00Z"),
+                Instant.parse("2026-04-08T18:00:00Z"),
+                2,
+                "active",
+                null,
+                Instant.parse("2026-04-07T17:00:00Z"),
+                Instant.parse("2026-04-07T17:00:00Z"),
+                List.of(creatorId, participantId),
+                List.of("Creator", "Participant"));
+
+        when(sidequestRepository.profileExists(joinerId)).thenReturn(true);
+        when(sidequestRepository.sidequestExists(sidequestId)).thenReturn(true);
+        when(sidequestRepository.getRequiredSidequest(sidequestId)).thenReturn(fullSidequest);
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> sidequestService.joinSidequest(sidequestId.toString(), user));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+        assertEquals("This sidequest is full.", exception.getReason());
         verify(sidequestRepository).profileExists(joinerId);
         verify(sidequestRepository).sidequestExists(sidequestId);
         verify(sidequestRepository).getRequiredSidequest(sidequestId);

@@ -29,6 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.bloc.app.controller.SidequestController;
 import com.bloc.app.dto.CreateSidequestRequest;
 import com.bloc.app.dto.DiscoverSidequestResponse;
+import com.bloc.app.dto.SidequestDetailResponse;
 import com.bloc.app.dto.SidequestResponse;
 import com.bloc.app.security.AuthenticatedUser;
 import com.bloc.app.security.SecurityConfig;
@@ -94,6 +95,23 @@ class SidequestSecurityWebMvcTest {
     @Test
     void myJoinedSidequestsRejectsInvalidBearerToken() throws Exception {
         mockMvc.perform(get("/api/sidequests/my-joined")
+                        .header(AUTHORIZATION, "Bearer not-a-real-token"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void sidequestDetailsRejectsMissingBearerToken() throws Exception {
+        mockMvc.perform(get("/api/sidequests/{sidequestId}", "33333333-3333-3333-3333-333333333333"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sidequestService);
+    }
+
+    @Test
+    void sidequestDetailsRejectsInvalidBearerToken() throws Exception {
+        mockMvc.perform(get("/api/sidequests/{sidequestId}", "33333333-3333-3333-3333-333333333333")
                         .header(AUTHORIZATION, "Bearer not-a-real-token"))
                 .andExpect(status().isUnauthorized());
 
@@ -271,6 +289,43 @@ class SidequestSecurityWebMvcTest {
     }
 
     @Test
+    void sidequestDetailsUsesAuthenticatedUserContext() throws Exception {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.getSidequest(any(), any())).thenReturn(sampleDetailResponse(creatorId, joinerId));
+
+        mockMvc.perform(get("/api/sidequests/{sidequestId}", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.creator.displayName").value("Creator"))
+                .andExpect(jsonPath("$.participants[0].displayName").value("Joiner"))
+                .andExpect(jsonPath("$.participantCount").value(1))
+                .andExpect(jsonPath("$.currentUserIsCreator").value(false))
+                .andExpect(jsonPath("$.currentUserHasJoined").value(true));
+
+        ArgumentCaptor<AuthenticatedUser> userCaptor = ArgumentCaptor.forClass(AuthenticatedUser.class);
+        verify(sidequestService).getSidequest(org.mockito.ArgumentMatchers.eq(sidequestId.toString()), userCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(joinerId, userCaptor.getValue().userId());
+    }
+
+    @Test
+    void sidequestDetailsReturnsNotFound() throws Exception {
+        UUID joinerId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(sidequestService.getSidequest(any(), any()))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Sidequest not found."));
+
+        mockMvc.perform(get("/api/sidequests/{sidequestId}", sidequestId)
+                        .with(jwt().jwt(jwt -> jwt
+                                .subject(joinerId.toString())
+                                .claim("email", "joiner@bloc.test"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void joinSidequestRejectsJoiningOwnSidequest() throws Exception {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -331,11 +386,39 @@ class SidequestSecurityWebMvcTest {
                 Instant.parse("2026-04-07T18:00:00Z"),
                 Instant.parse("2026-04-08T18:00:00Z"),
                 8,
+                1,
                 "active",
                 creatorId,
                 null,
                 Instant.parse("2026-04-07T17:00:00Z"),
                 Instant.parse("2026-04-07T17:00:00Z"));
+    }
+
+    private SidequestDetailResponse sampleDetailResponse(UUID creatorId, UUID joinerId) {
+        return new SidequestDetailResponse(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "Library sprint",
+                "Focus session before class",
+                "study",
+                "Main library",
+                null,
+                null,
+                Instant.parse("2026-04-07T18:00:00Z"),
+                Instant.parse("2026-04-08T18:00:00Z"),
+                8,
+                "active",
+                null,
+                Instant.parse("2026-04-07T17:00:00Z"),
+                Instant.parse("2026-04-07T17:00:00Z"),
+                new SidequestDetailResponse.UserSummary(creatorId, "Creator", null),
+                List.of(new SidequestDetailResponse.ParticipantSummary(
+                        joinerId,
+                        "Joiner",
+                        null,
+                        Instant.parse("2026-04-07T17:10:00Z"))),
+                1,
+                false,
+                true);
     }
 
     private String sidequestPayload() {

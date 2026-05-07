@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -37,6 +38,17 @@ public class SidequestRepository {
             resultSet.getBigDecimal("distance_miles"),
             toInstant(resultSet, "created_at"),
             toInstant(resultSet, "updated_at"));
+
+    private static final RowMapper<SidequestUserSummary> USER_SUMMARY_ROW_MAPPER = (resultSet, rowNum) -> new SidequestUserSummary(
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("display_name"),
+            resultSet.getString("avatar_url"));
+
+    private static final RowMapper<SidequestParticipantSummary> PARTICIPANT_SUMMARY_ROW_MAPPER = (resultSet, rowNum) -> new SidequestParticipantSummary(
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("display_name"),
+            resultSet.getString("avatar_url"),
+            toInstant(resultSet, "joined_at"));
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -357,6 +369,49 @@ public class SidequestRepository {
         return count != null && count > 0;
     }
 
+    public Optional<SidequestUserSummary> findUserSummary(UUID userId) {
+        return jdbcTemplate.query(
+                """
+                select
+                    id,
+                    coalesce(
+                        nullif(trim(full_name), ''),
+                        nullif(trim(user_name), ''),
+                        nullif(trim(umass_email), ''),
+                        id::text
+                    ) as display_name,
+                    avatar_url
+                from profiles
+                where id = :userId
+                """,
+                Map.of("userId", userId),
+                USER_SUMMARY_ROW_MAPPER)
+                .stream()
+                .findFirst();
+    }
+
+    public List<SidequestParticipantSummary> findParticipantSummaries(UUID sidequestId) {
+        return jdbcTemplate.query(
+                """
+                select
+                    sp.user_id as id,
+                    coalesce(
+                        nullif(trim(p.full_name), ''),
+                        nullif(trim(p.user_name), ''),
+                        nullif(trim(p.umass_email), ''),
+                        sp.user_id::text
+                    ) as display_name,
+                    p.avatar_url,
+                    sp.joined_at
+                from sidequest_participants sp
+                left join profiles p on p.id = sp.user_id
+                where sp.sidequest_id = :sidequestId
+                order by sp.joined_at asc
+                """,
+                Map.of("sidequestId", sidequestId),
+                PARTICIPANT_SUMMARY_ROW_MAPPER);
+    }
+
     public Sidequest getRequiredSidequest(UUID sidequestId) {
         SidequestRow row = jdbcTemplate.queryForObject(
                 buildRequiredSidequestQuery(),
@@ -460,5 +515,18 @@ public class SidequestRepository {
     }
 
     record DiscoveryQuery(String sql, MapSqlParameterSource parameters) {
+    }
+
+    public record SidequestUserSummary(
+            UUID id,
+            String displayName,
+            String avatarUrl) {
+    }
+
+    public record SidequestParticipantSummary(
+            UUID id,
+            String displayName,
+            String avatarUrl,
+            Instant joinedAt) {
     }
 }

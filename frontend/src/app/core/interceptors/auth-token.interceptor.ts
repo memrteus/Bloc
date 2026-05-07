@@ -10,6 +10,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
     /^\/auth\/me(?:[/?#]|$)/.test(requestUrl) ||
     /^\/auth\/logout(?:[/?#]|$)/.test(requestUrl) ||
     /^\/sidequests\/my-joined(?:[/?#]|$)/.test(requestUrl) ||
+    (/^\/sidequests\/(?!discover(?:[/?#]|$))[^/?#]+(?:[/?#]|$)/.test(requestUrl) && request.method === 'GET') ||
     (/^\/sidequests(?:[/?#]|$)/.test(requestUrl) && request.method !== 'GET');
 
   if (!requiresAuth) {
