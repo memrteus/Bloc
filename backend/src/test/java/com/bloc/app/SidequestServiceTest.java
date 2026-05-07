@@ -141,6 +141,34 @@ class SidequestServiceTest {
     }
 
     @Test
+    void getMyJoinedSidequestsUsesAuthenticatedUserIdAndMapsDiscoveryShape() {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID userId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        AuthenticatedUser user = new AuthenticatedUser(userId, "joiner@bloc.test");
+        when(sidequestRepository.findJoinedSidequestsOrderByJoinedAtDesc(userId))
+                .thenReturn(List.of(sampleSidequestWithParticipants(creatorId, List.of(userId))));
+
+        List<DiscoverSidequestResponse> response = sidequestService.getMyJoinedSidequests(user);
+
+        assertEquals(1, response.size());
+        assertEquals("Library sprint", response.getFirst().title());
+        assertEquals(creatorId, response.getFirst().creatorId());
+        verify(sidequestRepository).findJoinedSidequestsOrderByJoinedAtDesc(userId);
+    }
+
+    @Test
+    void getMyJoinedSidequestsReturnsEmptyListWhenUserHasNotJoinedAny() {
+        UUID userId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        AuthenticatedUser user = new AuthenticatedUser(userId, "joiner@bloc.test");
+        when(sidequestRepository.findJoinedSidequestsOrderByJoinedAtDesc(userId)).thenReturn(List.of());
+
+        List<DiscoverSidequestResponse> response = sidequestService.getMyJoinedSidequests(user);
+
+        assertEquals(0, response.size());
+        verify(sidequestRepository).findJoinedSidequestsOrderByJoinedAtDesc(userId);
+    }
+
+    @Test
     void joinSidequestRejectsJoiningOwnSidequest() {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");

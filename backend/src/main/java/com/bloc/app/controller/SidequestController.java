@@ -42,6 +42,11 @@ public class SidequestController {
         return sidequestService.discoverSidequests(search, category, lat, lng, radiusMiles, limit, offset);
     }
 
+    @GetMapping("/my-joined")
+    public List<DiscoverSidequestResponse> getMyJoinedSidequests(@AuthenticationPrincipal Jwt jwt) {
+        return sidequestService.getMyJoinedSidequests(AuthenticatedUser.fromJwt(jwt));
+    }
+
     @GetMapping("/{sidequestId}")
     public SidequestResponse getSidequest(@PathVariable String sidequestId) {
         return sidequestService.getSidequest(sidequestId);

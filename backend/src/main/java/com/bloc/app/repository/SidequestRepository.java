@@ -89,6 +89,59 @@ public class SidequestRepository {
                 .toList();
     }
 
+    public List<Sidequest> findJoinedSidequestsOrderByJoinedAtDesc(UUID userId) {
+        List<SidequestRow> rows = jdbcTemplate.query(
+                buildJoinedSidequestsQuery(),
+                Map.of("userId", userId),
+                SIDEQUEST_ROW_MAPPER);
+
+        return rows.stream()
+                .map(row -> new Sidequest(
+                        row.id(),
+                        row.creatorId(),
+                        row.title(),
+                        row.description(),
+                        row.category(),
+                        row.locationName(),
+                        row.latitude(),
+                        row.longitude(),
+                        row.startsAt(),
+                        row.expiresAt(),
+                        row.maxParticipants(),
+                        row.status(),
+                        row.distanceMiles(),
+                        row.createdAt(),
+                        row.updatedAt(),
+                        getParticipantUserIds(row.id()),
+                        getParticipantDisplayNames(row.id())))
+                .toList();
+    }
+
+    String buildJoinedSidequestsQuery() {
+        return """
+                select
+                    s.id,
+                    s.creator_id,
+                    s.title,
+                    s.description,
+                    s.category,
+                    s.location_name,
+                    s.latitude,
+                    s.longitude,
+                    s.starts_at,
+                    s.expires_at,
+                    s.max_participants,
+                    s.status,
+                    null::numeric as distance_miles,
+                    s.created_at,
+                    s.updated_at
+                from sidequest_participants sp
+                join sidequests s on s.id = sp.sidequest_id
+                where sp.user_id = :userId
+                order by sp.joined_at desc, s.created_at desc
+                """;
+    }
+
     DiscoveryQuery buildDiscoverableSidequestsQuery(
             String search,
             String category,

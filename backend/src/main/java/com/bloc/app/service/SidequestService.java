@@ -67,6 +67,14 @@ public class SidequestService {
         return SidequestResponse.fromModel(sidequestRepository.getRequiredSidequest(parsedSidequestId));
     }
 
+    @Transactional(readOnly = true)
+    public List<DiscoverSidequestResponse> getMyJoinedSidequests(AuthenticatedUser user) {
+        return sidequestRepository.findJoinedSidequestsOrderByJoinedAtDesc(user.userId())
+                .stream()
+                .map(DiscoverSidequestResponse::fromModel)
+                .toList();
+    }
+
     @Transactional
     public SidequestResponse createSidequest(CreateSidequestRequest request, AuthenticatedUser user) {
         ensureProfileExists(user);
