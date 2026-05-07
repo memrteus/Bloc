@@ -389,6 +389,25 @@ public class SidequestRepository {
                         .addValue("status", status));
     }
 
+    public void deleteSidequest(UUID sidequestId) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("sidequestId", sidequestId);
+
+        jdbcTemplate.update(
+                """
+                delete from sidequest_participants
+                where sidequest_id = :sidequestId
+                """,
+                parameters);
+
+        jdbcTemplate.update(
+                """
+                delete from sidequests
+                where id = :sidequestId
+                """,
+                parameters);
+    }
+
     public boolean removeParticipant(UUID sidequestId, UUID userId) {
         int rowsDeleted = jdbcTemplate.update(
                 """

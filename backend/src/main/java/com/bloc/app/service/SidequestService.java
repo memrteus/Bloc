@@ -137,7 +137,7 @@ public class SidequestService {
         Sidequest sidequest = getExistingSidequest(parsedSidequestId);
         assertCreator(sidequest, user);
 
-        sidequestRepository.updateSidequestStatus(parsedSidequestId, STATUS_DELETED);
+        sidequestRepository.deleteSidequest(parsedSidequestId);
     }
 
     @Transactional

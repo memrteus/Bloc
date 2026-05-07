@@ -454,6 +454,22 @@ class SidequestServiceTest {
     }
 
     @Test
+    void deleteSidequestAllowsCompletedSidequestForCreator() {
+        UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        AuthenticatedUser user = new AuthenticatedUser(creatorId, "creator@bloc.test");
+
+        when(sidequestRepository.profileExists(creatorId)).thenReturn(true);
+        when(sidequestRepository.sidequestExists(sidequestId)).thenReturn(true);
+        when(sidequestRepository.getRequiredSidequest(sidequestId))
+                .thenReturn(sampleCompletedSidequest(creatorId));
+
+        sidequestService.deleteSidequest(sidequestId.toString(), user);
+
+        verify(sidequestRepository).deleteSidequest(sidequestId);
+    }
+
+    @Test
     void completeSidequestSetsCompletedStatusForCreator() {
         UUID creatorId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID sidequestId = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -554,6 +570,27 @@ class SidequestServiceTest {
                 Instant.parse("2026-04-07T17:00:00Z"),
                 Instant.parse("2026-04-07T17:00:00Z"),
                 participantUserIds,
+                List.of("Creator"));
+    }
+
+    private Sidequest sampleCompletedSidequest(UUID creatorId) {
+        return new Sidequest(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                creatorId,
+                "Library sprint",
+                "Focus session before class",
+                "study",
+                "Main library",
+                BigDecimal.valueOf(42.3910),
+                BigDecimal.valueOf(-72.5266),
+                Instant.parse("2026-04-07T18:00:00Z"),
+                Instant.parse("2027-04-08T18:00:00Z"),
+                8,
+                "completed",
+                null,
+                Instant.parse("2026-04-07T17:00:00Z"),
+                Instant.parse("2026-04-07T17:30:00Z"),
+                List.of(creatorId),
                 List.of("Creator"));
     }
 

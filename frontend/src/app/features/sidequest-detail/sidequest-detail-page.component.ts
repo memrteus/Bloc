@@ -3,24 +3,29 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subscription, finalize } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, finalize, switchMap, tap } from 'rxjs';
 
+import { MapboxLocationSuggestion, MapboxSearchService } from '../../core/services/mapbox-search.service';
 import { SidequestApiService, SidequestDetailResponse, UpdateSidequestRequest } from '../../core/services/sidequest-api.service';
+import { SelectedMapLocation, SidequestMapComponent, SidequestMapItem } from '../../shared/components/sidequest-map/sidequest-map.component';
 
 interface EditSidequestForm {
   title: string;
   description: string;
   locationName: string;
+  locationLabel: string | null;
   latitude: number | null;
   longitude: number | null;
   maxParticipants: number | null;
   expiresAt: string;
 }
 
+type ConfirmationAction = 'complete' | 'delete' | 'leave';
+
 @Component({
   selector: 'app-sidequest-detail-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SidequestMapComponent],
   template: `
     <section class="detail-page">
       <a class="back-link" routerLink="/home">Back to groups</a>
@@ -75,7 +80,7 @@ interface EditSidequestForm {
           <button type="button" class="quiet-action" *ngIf="quest.currentUserHasJoined" disabled>
             Joined
           </button>
-          <button type="button" class="leave-action" *ngIf="canLeaveSidequest(quest)" [disabled]="leaving" (click)="leaveSidequest()">
+          <button type="button" class="leave-action" *ngIf="canLeaveSidequest(quest)" [disabled]="leaving" (click)="requestConfirmation('leave')">
             {{ leaving ? 'Leaving...' : 'Leave sidequest' }}
           </button>
           <button type="button" class="quiet-action" *ngIf="isSidequestFull(quest) && !quest.currentUserHasJoined" disabled>
@@ -86,11 +91,31 @@ interface EditSidequestForm {
             <button type="button" *ngIf="canEditSidequest(quest)" (click)="toggleEditForm()">
               {{ editing ? 'Cancel edit' : 'Edit' }}
             </button>
-            <button type="button" *ngIf="canCompleteSidequest(quest)" [disabled]="completing" (click)="completeSidequest()">
+            <button type="button" *ngIf="canCompleteSidequest(quest)" [disabled]="completing" (click)="requestConfirmation('complete')">
               {{ completing ? 'Completing...' : 'Complete' }}
             </button>
-            <button type="button" class="danger-action" *ngIf="canDeleteSidequest(quest)" [disabled]="deleting" (click)="deleteSidequest()">
+            <button type="button" class="danger-action" *ngIf="canDeleteSidequest(quest)" [disabled]="deleting" (click)="requestConfirmation('delete')">
               {{ deleting ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </section>
+
+        <section class="confirm-popover" *ngIf="pendingConfirmation as confirmation" [class.danger]="confirmation === 'delete'">
+          <div>
+            <p class="mono-title">{{ confirmationEyebrow(confirmation) }}</p>
+            <h2>{{ confirmationTitle(confirmation) }}</h2>
+            <p>{{ confirmationMessage(confirmation) }}</p>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" class="quiet-action" (click)="clearConfirmation()">Cancel</button>
+            <button
+              type="button"
+              class="primary-action"
+              [class.danger-confirm]="confirmation === 'delete'"
+              [disabled]="confirmationBusy(confirmation)"
+              (click)="confirmPendingAction(confirmation)"
+            >
+              {{ confirmationConfirmLabel(confirmation) }}
             </button>
           </div>
         </section>
@@ -116,19 +141,46 @@ interface EditSidequestForm {
 
             <label>
               Location
-              <input name="locationName" type="text" [(ngModel)]="editForm.locationName" required />
+              <div class="location-field">
+                <input
+                  name="locationName"
+                  type="text"
+                  [(ngModel)]="editForm.locationName"
+                  (ngModelChange)="onEditLocationSearchChange($event)"
+                  required
+                  autocomplete="off"
+                  placeholder="Search for a place or address"
+                />
+
+                <div class="location-suggestions" *ngIf="editLocationSuggestions.length > 0">
+                  <button
+                    type="button"
+                    *ngFor="let suggestion of editLocationSuggestions"
+                    (click)="selectEditLocationSuggestion(suggestion)"
+                  >
+                    <span>{{ suggestion.name }}</span>
+                    <small *ngIf="suggestion.placeFormatted || suggestion.fullAddress">
+                      {{ suggestion.fullAddress || suggestion.placeFormatted }}
+                    </small>
+                  </button>
+                </div>
+              </div>
+              <p class="field-note" *ngIf="editLocationSearching">Searching locations...</p>
+              <p class="field-note selected" *ngIf="hasSelectedEditLocation()">
+                Selected: {{ editForm.locationLabel || editForm.locationName }}
+              </p>
             </label>
 
-            <div class="coordinate-grid">
-              <label>
-                Latitude
-                <input name="latitude" type="number" step="any" [(ngModel)]="editForm.latitude" />
-              </label>
-              <label>
-                Longitude
-                <input name="longitude" type="number" step="any" [(ngModel)]="editForm.longitude" />
-              </label>
-            </div>
+            <section class="edit-map-picker">
+              <p class="participant-title">Pick on map</p>
+              <app-sidequest-map
+                [sidequests]="editMapSidequests"
+                [selectableLocationMode]="true"
+                [initialCenter]="editMapCenter"
+                [initialZoom]="14"
+                (locationSelected)="applyEditMapSelectedLocation($event)"
+              ></app-sidequest-map>
+            </section>
 
             <div class="coordinate-grid">
               <label>
@@ -319,6 +371,7 @@ interface EditSidequestForm {
       padding: 0.5rem 0.86rem;
       font-size: 0.84rem;
       font-weight: 800;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
     }
 
     .primary-action {
@@ -326,6 +379,14 @@ interface EditSidequestForm {
       color: #effbff;
       background: linear-gradient(145deg, #0f6378, #2887a0);
       cursor: pointer;
+    }
+
+    .primary-action:hover:not([disabled]),
+    .leave-action:hover:not([disabled]),
+    .quiet-action:hover:not([disabled]),
+    .creator-actions button:hover:not([disabled]) {
+      transform: translateY(-1px);
+      box-shadow: 0 9px 18px rgba(18, 36, 51, 0.14);
     }
 
     .quiet-action,
@@ -345,6 +406,63 @@ interface EditSidequestForm {
       border-color: #efc6c6 !important;
       background: #fff4f4 !important;
       color: #9b3f3f !important;
+    }
+
+    .danger-action:hover:not([disabled]),
+    .leave-action:hover:not([disabled]) {
+      border-color: #da8e8e !important;
+      background: #ffeaea !important;
+    }
+
+    .confirm-popover {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      border: 1px solid #bdd8e2;
+      border-radius: 12px;
+      background: #f1fbff;
+      padding: 0.8rem;
+      box-shadow: 0 14px 30px rgba(15, 49, 65, 0.14);
+      animation: pop-in 160ms ease both;
+    }
+
+    .confirm-popover::before {
+      content: '';
+      position: absolute;
+      top: -7px;
+      right: 2rem;
+      width: 12px;
+      height: 12px;
+      border-top: 1px solid #bdd8e2;
+      border-left: 1px solid #bdd8e2;
+      background: inherit;
+      transform: rotate(45deg);
+    }
+
+    .confirm-popover.danger {
+      border-color: #f0b8b8;
+      background: #fff7f7;
+      box-shadow: 0 14px 30px rgba(127, 45, 45, 0.12);
+    }
+
+    .confirm-popover p {
+      margin: 0.25rem 0 0;
+      color: #496777;
+      font-size: 0.84rem;
+      line-height: 1.4;
+    }
+
+    .confirm-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      justify-content: flex-end;
+    }
+
+    .danger-confirm {
+      background: linear-gradient(145deg, #b43c3c, #d45f5f) !important;
     }
 
     .primary-action[disabled],
@@ -395,6 +513,82 @@ interface EditSidequestForm {
     .edit-form textarea {
       resize: vertical;
       min-height: 92px;
+    }
+
+    .location-field {
+      position: relative;
+      display: grid;
+    }
+
+    .location-suggestions {
+      position: absolute;
+      z-index: 5;
+      top: calc(100% + 0.3rem);
+      left: 0;
+      right: 0;
+      overflow: hidden;
+      border: 1px solid #c4d6df;
+      border-radius: 10px;
+      background: #ffffff;
+      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+    }
+
+    .location-suggestions button {
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid #e1edf2;
+      background: transparent;
+      color: #14384a;
+      cursor: pointer;
+      display: grid;
+      gap: 0.16rem;
+      padding: 0.62rem 0.72rem;
+      text-align: left;
+    }
+
+    .location-suggestions button:last-child {
+      border-bottom: 0;
+    }
+
+    .location-suggestions button:hover {
+      background: #eef8fc;
+    }
+
+    .location-suggestions span {
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .location-suggestions small,
+    .field-note {
+      color: #5c7482;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .field-note {
+      margin: 0;
+    }
+
+    .field-note.selected {
+      color: #0f766e;
+      font-weight: 700;
+    }
+
+    .edit-map-picker {
+      display: grid;
+      gap: 0.45rem;
+      border: 1px solid #d3e4eb;
+      border-radius: 12px;
+      background: #f5fbfe;
+      padding: 0.7rem;
+    }
+
+    .participant-title {
+      margin: 0;
+      color: #14384a;
+      font-size: 0.83rem;
+      font-weight: 700;
     }
 
     .coordinate-grid {
@@ -452,6 +646,17 @@ interface EditSidequestForm {
       font-weight: 800;
     }
 
+    @keyframes pop-in {
+      from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
     @media (max-width: 760px) {
       .detail-header {
         flex-direction: column;
@@ -467,6 +672,19 @@ interface EditSidequestForm {
         grid-template-columns: 1fr;
       }
 
+      .confirm-popover {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .confirm-actions {
+        justify-content: stretch;
+      }
+
+      .confirm-actions button {
+        flex: 1;
+      }
+
       .coordinate-grid {
         grid-template-columns: 1fr;
       }
@@ -477,7 +695,10 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly sidequestApi = inject(SidequestApiService);
+  private readonly mapboxSearch = inject(MapboxSearchService);
+  private readonly editLocationSearchInput = new Subject<string>();
   private routeSubscription?: Subscription;
+  private editLocationSearchSubscription?: Subscription;
 
   protected sidequest: SidequestDetailResponse | null = null;
   protected loading = false;
@@ -487,14 +708,20 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
   protected completing = false;
   protected leaving = false;
   protected editing = false;
+  protected pendingConfirmation: ConfirmationAction | null = null;
   protected notFound = false;
   protected errorMessage = '';
   protected actionMessage = '';
   protected editErrors: string[] = [];
+  protected editLocationSuggestions: MapboxLocationSuggestion[] = [];
+  protected editLocationSearching = false;
+  protected editMapCenter: [number, number] = [-72.5199, 42.3732];
+  protected editMapSidequests: SidequestMapItem[] = [];
   protected editForm: EditSidequestForm = {
     title: '',
     description: '',
     locationName: '',
+    locationLabel: null,
     latitude: null,
     longitude: null,
     maxParticipants: null,
@@ -511,10 +738,23 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
 
       this.loadSidequest(sidequestId);
     });
+    this.editLocationSearchSubscription = this.editLocationSearchInput
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        tap(() => {
+          this.editLocationSearching = true;
+        }),
+        switchMap((query) => this.mapboxSearch.suggest(query).pipe(finalize(() => (this.editLocationSearching = false))))
+      )
+      .subscribe((suggestions) => {
+        this.editLocationSuggestions = suggestions;
+      });
   }
 
   ngOnDestroy(): void {
     this.routeSubscription?.unsubscribe();
+    this.editLocationSearchSubscription?.unsubscribe();
   }
 
   protected joinSidequest(): void {
@@ -569,12 +809,151 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
       });
   }
 
-  protected completeSidequest(): void {
-    if (!this.sidequest || this.completing || !this.canCompleteSidequest(this.sidequest)) {
+  protected requestConfirmation(action: ConfirmationAction): void {
+    this.pendingConfirmation = this.pendingConfirmation === action ? null : action;
+    this.actionMessage = '';
+  }
+
+  protected clearConfirmation(): void {
+    this.pendingConfirmation = null;
+  }
+
+  protected confirmPendingAction(action: ConfirmationAction): void {
+    if (this.confirmationBusy(action)) {
       return;
     }
 
-    if (!window.confirm('Mark this sidequest complete?')) {
+    this.pendingConfirmation = null;
+    if (action === 'complete') {
+      this.completeSidequest();
+      return;
+    }
+
+    if (action === 'delete') {
+      this.deleteSidequest();
+      return;
+    }
+
+    this.leaveSidequest();
+  }
+
+  protected confirmationBusy(action: ConfirmationAction): boolean {
+    if (action === 'complete') {
+      return this.completing;
+    }
+
+    if (action === 'delete') {
+      return this.deleting;
+    }
+
+    return this.leaving;
+  }
+
+  protected confirmationEyebrow(action: ConfirmationAction): string {
+    if (action === 'delete') {
+      return 'Delete sidequest';
+    }
+
+    if (action === 'complete') {
+      return 'Mark complete';
+    }
+
+    return 'Leave sidequest';
+  }
+
+  protected confirmationTitle(action: ConfirmationAction): string {
+    if (action === 'delete') {
+      return 'Hide this sidequest?';
+    }
+
+    if (action === 'complete') {
+      return 'Mark this as complete?';
+    }
+
+    return 'Leave this sidequest?';
+  }
+
+  protected confirmationMessage(action: ConfirmationAction): string {
+    if (action === 'delete') {
+      return 'It will be removed from normal views, including after completion.';
+    }
+
+    if (action === 'complete') {
+      return 'Participants will see it as completed instead of active.';
+    }
+
+    return 'You can join again later if it is still active and has room.';
+  }
+
+  protected confirmationConfirmLabel(action: ConfirmationAction): string {
+    if (action === 'delete') {
+      return this.deleting ? 'Deleting...' : 'Delete';
+    }
+
+    if (action === 'complete') {
+      return this.completing ? 'Completing...' : 'Complete';
+    }
+
+    return this.leaving ? 'Leaving...' : 'Leave';
+  }
+
+  protected onEditLocationSearchChange(value: string): void {
+    this.editForm.locationName = value;
+    this.editForm.locationLabel = null;
+    this.editForm.latitude = null;
+    this.editForm.longitude = null;
+    this.editMapSidequests = [];
+
+    if (value.trim().length < 3) {
+      this.editLocationSuggestions = [];
+      this.editLocationSearching = false;
+      return;
+    }
+
+    this.editLocationSearchInput.next(value);
+  }
+
+  protected selectEditLocationSuggestion(suggestion: MapboxLocationSuggestion): void {
+    this.editLocationSuggestions = [];
+    this.editLocationSearching = true;
+
+    this.mapboxSearch
+      .retrieve(suggestion)
+      .pipe(finalize(() => (this.editLocationSearching = false)))
+      .subscribe((selectedLocation) => {
+        if (!selectedLocation) {
+          this.editErrors = ['Unable to read coordinates for that location. Try another result.'];
+          return;
+        }
+
+        this.editErrors = [];
+        this.editForm.locationName = selectedLocation.placeLabel
+          ? `${selectedLocation.locationName}, ${selectedLocation.placeLabel}`
+          : selectedLocation.locationName;
+        this.editForm.locationLabel = selectedLocation.placeLabel;
+        this.editForm.latitude = selectedLocation.latitude;
+        this.editForm.longitude = selectedLocation.longitude;
+        this.syncEditMapPreview();
+      });
+  }
+
+  protected applyEditMapSelectedLocation(location: SelectedMapLocation): void {
+    this.editErrors = [];
+    this.editForm.locationName = location.locationName;
+    this.editForm.locationLabel = location.locationName;
+    this.editForm.latitude = location.latitude;
+    this.editForm.longitude = location.longitude;
+    this.editLocationSuggestions = [];
+    this.editLocationSearching = false;
+    this.syncEditMapPreview();
+  }
+
+  protected hasSelectedEditLocation(): boolean {
+    return this.editForm.latitude !== null && this.editForm.longitude !== null;
+  }
+
+  protected completeSidequest(): void {
+    if (!this.sidequest || this.completing || !this.canCompleteSidequest(this.sidequest)) {
       return;
     }
 
@@ -602,15 +981,12 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!window.confirm('Delete this sidequest? It will be hidden from normal views.')) {
-      return;
-    }
-
+    const sidequestId = this.sidequest.id;
     this.deleting = true;
     this.actionMessage = '';
 
     this.sidequestApi
-      .delete(this.sidequest.id)
+      .delete(sidequestId)
       .pipe(finalize(() => (this.deleting = false)))
       .subscribe({
         next: () => {
@@ -624,10 +1000,6 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
 
   protected leaveSidequest(): void {
     if (!this.sidequest || this.leaving || !this.canLeaveSidequest(this.sidequest)) {
-      return;
-    }
-
-    if (!window.confirm('Leave this sidequest?')) {
       return;
     }
 
@@ -656,6 +1028,7 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
 
     this.editing = !this.editing;
     this.editErrors = [];
+    this.clearConfirmation();
     if (this.editing) {
       this.populateEditForm(this.sidequest);
     }
@@ -757,11 +1130,15 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
       title: sidequest.title,
       description: sidequest.description,
       locationName: sidequest.locationName,
+      locationLabel: sidequest.locationName,
       latitude: sidequest.latitude,
       longitude: sidequest.longitude,
       maxParticipants: sidequest.maxParticipants,
       expiresAt: this.toDatetimeLocalValue(sidequest.expiresAt)
     };
+    this.editLocationSuggestions = [];
+    this.editLocationSearching = false;
+    this.syncEditMapPreview();
   }
 
   private buildUpdatePayload(): UpdateSidequestRequest | null {
@@ -782,8 +1159,8 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
       this.editErrors.push('Location is required.');
     }
 
-    if ((this.editForm.latitude === null) !== (this.editForm.longitude === null)) {
-      this.editErrors.push('Latitude and longitude must be provided together.');
+    if (this.editForm.latitude === null || this.editForm.longitude === null) {
+      this.editErrors.push('Select a location from the suggestions or map so this sidequest stays mapped correctly.');
     }
 
     if (this.editForm.maxParticipants !== null && this.editForm.maxParticipants < 1) {
@@ -807,6 +1184,26 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
 
   private normalizedStatus(sidequest: SidequestDetailResponse): string {
     return sidequest.status.toLowerCase();
+  }
+
+  private syncEditMapPreview(): void {
+    if (this.editForm.latitude === null || this.editForm.longitude === null) {
+      this.editMapSidequests = [];
+      return;
+    }
+
+    this.editMapCenter = [this.editForm.longitude, this.editForm.latitude];
+    this.editMapSidequests = [
+      {
+        id: this.sidequest?.id ?? 'editing-sidequest',
+        title: this.editForm.title || this.sidequest?.title || 'Editing sidequest',
+        description: this.editForm.description || this.sidequest?.description || null,
+        locationName: this.editForm.locationName,
+        latitude: this.editForm.latitude,
+        longitude: this.editForm.longitude,
+        status: this.sidequest?.status ?? 'active'
+      }
+    ];
   }
 
   private toDatetimeLocalValue(value: string | null): string {
