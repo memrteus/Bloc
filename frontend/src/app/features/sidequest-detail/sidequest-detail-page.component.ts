@@ -64,6 +64,9 @@ import { SidequestApiService, SidequestDetailResponse } from '../../core/service
           <button type="button" class="quiet-action" *ngIf="quest.currentUserHasJoined" disabled>
             Joined
           </button>
+          <button type="button" class="leave-action" *ngIf="canLeaveSidequest(quest)" disabled>
+            Leave sidequest
+          </button>
           <button type="button" class="quiet-action" *ngIf="isSidequestFull(quest) && !quest.currentUserHasJoined" disabled>
             Full
           </button>
@@ -237,6 +240,7 @@ import { SidequestApiService, SidequestDetailResponse } from '../../core/service
     }
 
     .primary-action,
+    .leave-action,
     .quiet-action,
     .creator-actions button {
       border-radius: 10px;
@@ -260,7 +264,14 @@ import { SidequestApiService, SidequestDetailResponse } from '../../core/service
       color: #56717f;
     }
 
+    .leave-action {
+      border: 1px solid #efc6c6;
+      background: #fff4f4;
+      color: #9b3f3f;
+    }
+
     .primary-action[disabled],
+    .leave-action[disabled],
     .creator-actions button[disabled] {
       cursor: not-allowed;
       opacity: 0.64;
@@ -396,6 +407,10 @@ export class SidequestDetailPageComponent implements OnInit, OnDestroy {
 
   protected canJoinSidequest(sidequest: SidequestDetailResponse): boolean {
     return !sidequest.currentUserIsCreator && !sidequest.currentUserHasJoined && !this.isSidequestFull(sidequest);
+  }
+
+  protected canLeaveSidequest(sidequest: SidequestDetailResponse): boolean {
+    return sidequest.currentUserHasJoined && !sidequest.currentUserIsCreator;
   }
 
   protected isSidequestFull(sidequest: SidequestDetailResponse): boolean {

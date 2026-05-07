@@ -444,13 +444,20 @@ interface CreateSidequestForm {
       box-shadow: 0 24px 56px rgba(14, 31, 45, 0.14);
       display: grid;
       grid-template-columns: 248px 1fr;
-      overflow: hidden;
+      align-items: start;
+      overflow: visible;
     }
 
     .sidebar {
+      position: sticky;
+      top: 1.25rem;
+      min-height: calc(100vh - 3rem);
+      max-height: calc(100vh - 3rem);
+      overflow-y: auto;
       background: linear-gradient(180deg, #143142 0%, #102534 100%);
       color: #d6e8f0;
       border-right: 1px solid rgba(159, 183, 195, 0.24);
+      border-radius: 24px 0 0 24px;
       padding: 1.25rem 1rem;
       display: flex;
       flex-direction: column;
@@ -1162,11 +1169,17 @@ interface CreateSidequestForm {
 
       .dashboard-wrap {
         grid-template-columns: 1fr;
+        overflow: hidden;
       }
 
       .sidebar {
+        position: static;
+        min-height: 0;
+        max-height: none;
+        overflow-y: visible;
         border-right: none;
         border-bottom: 1px solid rgba(159, 183, 195, 0.24);
+        border-radius: 24px 24px 0 0;
       }
 
       .main-header {
