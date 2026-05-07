@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.bloc.app.config.SupabaseAuthProperties;
 import com.bloc.app.dto.CurrentUserResponse;
+import com.bloc.app.dto.CurrentUserUpdateRequest;
 import com.bloc.app.dto.LoginRequest;
 import com.bloc.app.dto.LoginResponse;
 import com.bloc.app.dto.SignupRequest;
@@ -224,6 +225,22 @@ public class SupabaseAuthService implements AuthService {
                         null,
                         null,
                         null));
+    }
+
+    @Override
+    public CurrentUserResponse updateCurrentUser(AuthenticatedUser authenticatedUser, CurrentUserUpdateRequest request) {
+        // Ensure profile exists
+        if (profileRepository.findCurrentUserProfile(authenticatedUser.userId()).isEmpty()) {
+            profileRepository.bootstrapProfile(
+                authenticatedUser.userId(),
+                authenticatedUser.email(),
+                null, // username
+                null  // fullName
+            );
+        }
+
+        profileRepository.upsertProfile(authenticatedUser.userId(), request.avatarUrl(), request.bio());
+        return getCurrentUser(authenticatedUser);
     }
 
     private void validateSignupRequest(SignupRequest request) {
